@@ -1,19 +1,44 @@
 {
   "source": "synthetic",
   "synthetic": {
-    "releases": 12580,
-    "processes": 12565,
-    "injected": 784,
+    "releases": 12577,
+    "processes": 12562,
+    "injected": 1454,
     "dq_defects": 57
   },
   "ingest_counts": {
-    "releases": 12580,
-    "processes": 12580,
-    "items": 16312,
-    "parties": 37034,
-    "bids": 24454,
-    "awards": 12580,
-    "contracts": 12580,
+    "releases": 12577,
+    "processes": 12577,
+    "items": 16297,
+    "parties": 37030,
+    "bids": 24453,
+    "awards": 12577,
+    "contracts": 12577,
     "amendments": 708
+  },
+  "signals": {
+    "alerts": 2173,
+    "processes_with_alerts": 1937,
+    "controls_run": 9,
+    "by_control": {
+      "C01": 113,
+      "C02": 810,
+      "C03": 134,
+      "C04": 572,
+      "C05": 201,
+      "C06": 72,
+      "C07": 218,
+      "C09": 53
+    }
+  },
+  "validate": {
+    "review_cases": 20,
+    "mean_recall": 0.994,
+    "dq_detected": 57,
+    "dq_injected": 57,
+    "review_judged": 20
+  },
+  "report": {
+    "pages": 13
   }
 }
