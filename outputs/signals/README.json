@@ -1,0 +1,3 @@
+{
+  "note": "Aggregated outputs only. Alert-level detail stays in the local DuckDB warehouse."
+}

@@ -385,7 +385,10 @@ class SyntheticGenerator:
         competitive = [p for p in procs if p.competitive]
 
         # Benford: one buyer whose amounts are "invented" (leading digits ~ uniform)
-        benford_buyer = self.buyers[int(rng.integers(0, len(self.buyers)))]
+        sizes: dict[str, int] = {}
+        for p in procs:
+            sizes[p.buyer] = sizes.get(p.buyer, 0) + 1
+        benford_buyer = buyers[max(sizes, key=sizes.get)]  # largest buyer: enough amounts to test
         self.benford_buyer = benford_buyer["id"]
         for p in procs:
             if p.buyer != benford_buyer["id"]:

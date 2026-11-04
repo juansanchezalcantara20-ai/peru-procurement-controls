@@ -14,12 +14,12 @@ finds. **42** records hit critical checks and **15** hit warning checks.
 
 | layer | n |
 |---|---|
-| releases (raw) | 12580 |
-| processes kept (one per OCID) | 12565 |
-| processes in analytical layer | 12557 |
-| awards in analytical layer | 12557 |
-| awards with usable amount | 12536 |
-| contracts in analytical layer | 12557 |
+| releases (raw) | 12577 |
+| processes kept (one per OCID) | 12562 |
+| processes in analytical layer | 12554 |
+| awards in analytical layer | 12554 |
+| awards with usable amount | 12533 |
+| contracts in analytical layer | 12554 |
 
 ## Checks
 
@@ -48,22 +48,22 @@ bids; their missing rate therefore mirrors the share of non-competitive processe
 
 | table | field | rows | missing | missing_pct |
 |---|---|---|---|---|
-| processes | buyer_id | 12565 | 8 | 0.06 |
-| processes | procurement_method | 12565 | 0 | 0.0 |
-| processes | method_details | 12565 | 0 | 0.0 |
-| processes | main_category | 12565 | 0 | 0.0 |
-| processes | tender_amount | 12565 | 0 | 0.0 |
-| processes | tender_start | 12565 | 6883 | 54.78 |
-| processes | tender_end | 12565 | 6883 | 54.78 |
-| processes | number_of_tenderers | 12565 | 0 | 0.0 |
-| awards | supplier_id | 12565 | 0 | 0.0 |
-| awards | amount | 12565 | 0 | 0.0 |
-| awards | award_date | 12565 | 0 | 0.0 |
-| contracts | date_signed | 12565 | 0 | 0.0 |
-| contracts | amount | 12565 | 0 | 0.0 |
-| items | classification_id | 16291 | 0 | 0.0 |
-| items | quantity | 16291 | 0 | 0.0 |
-| items | unit_amount | 16291 | 0 | 0.0 |
+| processes | buyer_id | 12562 | 8 | 0.06 |
+| processes | procurement_method | 12562 | 0 | 0.0 |
+| processes | method_details | 12562 | 0 | 0.0 |
+| processes | main_category | 12562 | 0 | 0.0 |
+| processes | tender_amount | 12562 | 0 | 0.0 |
+| processes | tender_start | 12562 | 6880 | 54.77 |
+| processes | tender_end | 12562 | 6880 | 54.77 |
+| processes | number_of_tenderers | 12562 | 0 | 0.0 |
+| awards | supplier_id | 12562 | 0 | 0.0 |
+| awards | amount | 12562 | 0 | 0.0 |
+| awards | award_date | 12562 | 0 | 0.0 |
+| contracts | date_signed | 12562 | 0 | 0.0 |
+| contracts | amount | 12562 | 0 | 0.0 |
+| items | classification_id | 16278 | 0 | 0.0 |
+| items | quantity | 16278 | 0 | 0.0 |
+| items | unit_amount | 16278 | 0 | 0.0 |
 
 ## How the checks feed the controls
 
