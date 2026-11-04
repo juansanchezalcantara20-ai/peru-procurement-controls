@@ -1,0 +1,296 @@
+"""Data-quality checks and the clean analytical layer.
+
+Before controlling the data, control its quality. Every check writes the offending records to
+``dq_issues``; the clean views (``f_*``) then exclude what would distort a control:
+
+* critical checks remove the record (or the affected field) from the analytical layer;
+* warning checks are reported but the record stays.
+
+The report is written to ``outputs/quality/`` and rendered into the site.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import duckdb
+import pandas as pd
+
+ABSURD_RATIO = 100        # award > 100x its own tender estimate
+ABSURD_CAP_PEN = 1e10     # or above S/ 10 billion for a single award
+MIN_DATE, MAX_DATE = "2000-01-01", "2030-12-31"
+
+
+@dataclass(frozen=True)
+class Check:
+    id: str
+    name: str
+    severity: str  # critical | warning
+    effect: str
+    sql: str
+
+
+KEPT = "(SELECT release_key FROM dq_kept_releases)"
+
+CHECKS: list[Check] = [
+    Check("DQ01", "Duplicate OCID (more than one release per process)", "warning",
+          "Only the latest release per OCID is kept (ties: last line in file).",
+          """SELECT ocid, CAST(release_key AS VARCHAR) AS record_id,
+                    'release ' || release_id AS detail
+             FROM releases WHERE release_key NOT IN """ + KEPT),
+    Check("DQ02", "Missing buyer identifier", "critical",
+          "Process excluded from every control (no entity to attribute it to).",
+          f"""SELECT ocid, ocid, coalesce(buyer_name, '(no name)') FROM processes
+              WHERE release_key IN {KEPT} AND (buyer_id IS NULL OR buyer_id = '')"""),
+    Check("DQ03", "Award without supplier", "critical",
+          "Award excluded from supplier-based controls.",
+          f"""SELECT ocid, award_id, 'no supplier' FROM awards
+              WHERE release_key IN {KEPT} AND supplier_id IS NULL"""),
+    Check("DQ04", "Negative or zero award amount", "critical",
+          "Award amount set to NULL in the analytical layer.",
+          f"""SELECT ocid, award_id, CAST(amount AS VARCHAR) FROM awards
+              WHERE release_key IN {KEPT} AND amount <= 0"""),
+    Check("DQ05", "Absurd award amount", "critical",
+          f"Award amount set to NULL (>{ABSURD_RATIO}x tender estimate or >S/ {ABSURD_CAP_PEN:,.0f}).",
+          f"""SELECT a.ocid, a.award_id, CAST(a.amount AS VARCHAR) FROM awards a
+              JOIN processes p USING (release_key)
+              WHERE a.release_key IN {KEPT} AND a.amount > 0 AND (a.amount > {ABSURD_CAP_PEN}
+                 OR (p.tender_amount > 0 AND a.amount > {ABSURD_RATIO} * p.tender_amount))"""),
+    Check("DQ06", "Award currency is not PEN", "critical",
+          "Amount set to NULL (no FX conversion is attempted).",
+          f"""SELECT ocid, award_id, currency FROM awards
+              WHERE release_key IN {KEPT} AND currency IS NOT NULL AND currency <> 'PEN'"""),
+    Check("DQ07", "Tender period ends before it starts", "critical",
+          "Tender period set to NULL (excluded from the submission-period control).",
+          f"""SELECT ocid, ocid, CAST(tender_start AS VARCHAR) || ' > ' || CAST(tender_end AS VARCHAR)
+              FROM processes WHERE release_key IN {KEPT} AND tender_end < tender_start"""),
+    Check("DQ08", "Award dated before the bid deadline", "warning",
+          "Reported only.",
+          f"""SELECT a.ocid, a.award_id, CAST(a.award_date AS VARCHAR) FROM awards a
+              JOIN processes p USING (release_key)
+              WHERE a.release_key IN {KEPT} AND p.tender_end >= p.tender_start
+                AND a.award_date < p.tender_end"""),
+    Check("DQ09", "Contract signed before its award", "critical",
+          "Signature date set to NULL (excluded from the award-to-signature control).",
+          f"""SELECT c.ocid, c.contract_id, CAST(c.date_signed AS VARCHAR) FROM contracts c
+              JOIN awards a ON a.release_key = c.release_key AND a.award_id = c.award_id
+              WHERE c.release_key IN {KEPT} AND c.date_signed < CAST(a.award_date AS DATE)"""),
+    Check("DQ10", "Date outside the plausible range", "warning",
+          f"Reported only (range {MIN_DATE} to {MAX_DATE}).",
+          f"""SELECT ocid, ocid, 'tender_start ' || CAST(tender_start AS VARCHAR) FROM processes
+              WHERE release_key IN {KEPT} AND (tender_start < '{MIN_DATE}' OR tender_start > '{MAX_DATE}')
+              UNION ALL
+              SELECT ocid, contract_id, 'date_signed ' || CAST(date_signed AS VARCHAR) FROM contracts
+              WHERE release_key IN {KEPT} AND (date_signed < '{MIN_DATE}' OR date_signed > '{MAX_DATE}')"""),
+    Check("DQ11", "Duplicate award identifier within a process", "warning",
+          "Reported only.",
+          f"""SELECT ocid, award_id, CAST(count(DISTINCT supplier_id) AS VARCHAR) || ' suppliers'
+              FROM awards WHERE release_key IN {KEPT}
+              GROUP BY ocid, award_id HAVING count(*) > 1 AND count(DISTINCT supplier_id) = 1"""),
+    Check("DQ12", "Same party id with different names", "warning",
+          "Reported only (name variants are common in registries).",
+          f"""SELECT min(ocid), party_id, CAST(count(DISTINCT name) AS VARCHAR) || ' names'
+              FROM parties WHERE release_key IN {KEPT}
+              GROUP BY party_id HAVING count(DISTINCT name) > 1"""),
+    Check("DQ13", "Item without classification", "warning",
+          "Item excluded from the category-median price control.",
+          f"""SELECT ocid, item_id, 'no classification' FROM items
+              WHERE release_key IN {KEPT} AND (classification_id IS NULL OR classification_id = '')"""),
+    Check("DQ14", "Contract whose awardID matches no award", "warning",
+          "Reported only.",
+          f"""SELECT c.ocid, c.contract_id, coalesce(c.award_id, '(null)') FROM contracts c
+              WHERE c.release_key IN {KEPT} AND NOT EXISTS (
+                SELECT 1 FROM awards a WHERE a.release_key = c.release_key AND a.award_id = c.award_id)"""),
+    Check("DQ15", "numberOfTenderers disagrees with published bids", "warning",
+          "Reported only; the analytical layer uses the count of distinct bidders when available.",
+          f"""SELECT p.ocid, p.ocid, CAST(p.number_of_tenderers AS VARCHAR) || ' vs ' ||
+                     CAST(count(DISTINCT b.supplier_id) AS VARCHAR)
+              FROM processes p JOIN bids b USING (release_key)
+              WHERE p.release_key IN {KEPT} AND p.number_of_tenderers IS NOT NULL
+              GROUP BY p.ocid, p.number_of_tenderers
+              HAVING count(DISTINCT b.supplier_id) <> p.number_of_tenderers"""),
+]
+
+COMPLETENESS = [
+    ("processes", "buyer_id"), ("processes", "procurement_method"),
+    ("processes", "method_details"), ("processes", "main_category"),
+    ("processes", "tender_amount"), ("processes", "tender_start"), ("processes", "tender_end"),
+    ("processes", "number_of_tenderers"), ("awards", "supplier_id"), ("awards", "amount"),
+    ("awards", "award_date"), ("contracts", "date_signed"), ("contracts", "amount"),
+    ("items", "classification_id"), ("items", "quantity"), ("items", "unit_amount"),
+]
+
+
+ANALYTICAL_LAYER = f"""
+-- Clean analytical layer used by every control. Built after the DQ checks.
+CREATE OR REPLACE VIEW f_process AS
+SELECT p.ocid, p.buyer_id, p.procurement_method, p.method_details, p.main_category,
+       p.tender_amount,
+       CASE WHEN p.tender_end >= p.tender_start THEN p.tender_start END AS tender_start,
+       CASE WHEN p.tender_end >= p.tender_start THEN p.tender_end END AS tender_end,
+       coalesce(b.n_bidders, p.number_of_tenderers) AS n_tenderers,
+       p.procurement_method IN ('open', 'selective') AS is_competitive,
+       coalesce(seg.segment, 'unknown') AS segment,
+       CAST(year(coalesce(p.date_published, p.tender_start, a.first_award)) AS INTEGER) AS year,
+       coalesce(p.date_published, p.tender_start, a.first_award) AS process_date
+FROM processes p
+LEFT JOIN (SELECT release_key, count(DISTINCT supplier_id) AS n_bidders FROM bids
+           WHERE supplier_id IS NOT NULL GROUP BY 1) b USING (release_key)
+LEFT JOIN (SELECT release_key, min(award_date) AS first_award FROM awards GROUP BY 1) a
+       USING (release_key)
+LEFT JOIN (SELECT release_key, arg_max(left(classification_id, 2), quantity * unit_amount)
+                  AS segment
+           FROM items WHERE classification_id IS NOT NULL GROUP BY 1) seg USING (release_key)
+WHERE p.release_key IN (SELECT release_key FROM dq_kept_releases)
+  AND p.buyer_id IS NOT NULL AND p.buyer_id <> '';
+
+CREATE OR REPLACE VIEW f_award AS
+SELECT a.ocid, a.award_id, a.supplier_id, a.award_date, a.status,
+       CASE WHEN a.amount > 0 AND coalesce(a.currency, 'PEN') = 'PEN'
+             AND a.amount <= {ABSURD_CAP_PEN}
+             AND NOT (p.tender_amount > 0 AND a.amount > {ABSURD_RATIO} * p.tender_amount)
+            THEN a.amount END AS amount,
+       f.buyer_id, f.segment, f.year, f.is_competitive, f.method_details, f.procurement_method
+FROM awards a
+JOIN processes p USING (release_key)
+JOIN f_process f ON f.ocid = a.ocid
+WHERE a.release_key IN (SELECT release_key FROM dq_kept_releases)
+  AND a.supplier_id IS NOT NULL;
+
+CREATE OR REPLACE VIEW f_item AS
+SELECT i.ocid, i.item_id, i.classification_id, i.quantity, i.unit_amount, f.buyer_id,
+       f.segment, f.year
+FROM items i JOIN f_process f ON f.ocid = i.ocid
+WHERE i.release_key IN (SELECT release_key FROM dq_kept_releases)
+  AND i.classification_id IS NOT NULL AND i.classification_id <> ''
+  AND i.unit_amount > 0 AND coalesce(i.currency, 'PEN') = 'PEN';
+
+CREATE OR REPLACE VIEW f_bid AS
+SELECT b.ocid, b.supplier_id, b.amount, f.buyer_id, f.year, f.is_competitive
+FROM bids b JOIN f_process f ON f.ocid = b.ocid
+WHERE b.release_key IN (SELECT release_key FROM dq_kept_releases)
+  AND b.supplier_id IS NOT NULL;
+
+CREATE OR REPLACE VIEW f_contract AS
+SELECT c.ocid, c.contract_id, c.award_id, fa.supplier_id, fa.buyer_id, fa.year,
+       fa.is_competitive, fa.method_details, fa.award_date,
+       CASE WHEN c.date_signed >= CAST(fa.award_date AS DATE) THEN c.date_signed END AS date_signed,
+       coalesce(fa.amount, CASE WHEN c.amount > 0 THEN c.amount END) AS original_amount,
+       am.final_amount, am.n_amendments
+FROM contracts c
+JOIN f_award fa ON fa.ocid = c.ocid AND fa.award_id = c.award_id
+LEFT JOIN (SELECT release_key, contract_id, count(*) AS n_amendments,
+                  arg_max(amended_amount, amendment_date) AS final_amount
+           FROM amendments GROUP BY 1, 2) am
+       ON am.release_key = c.release_key AND am.contract_id = c.contract_id
+WHERE c.release_key IN (SELECT release_key FROM dq_kept_releases);
+"""
+
+
+def build_kept_releases(con: duckdb.DuckDBPyConnection) -> None:
+    con.execute("""
+        CREATE OR REPLACE TABLE dq_kept_releases AS
+        SELECT release_key FROM (
+            SELECT release_key, row_number() OVER (
+                PARTITION BY ocid ORDER BY release_date DESC NULLS LAST, release_key DESC) AS rn
+            FROM releases) WHERE rn = 1
+    """)
+
+
+def run_quality(con: duckdb.DuckDBPyConnection) -> dict[str, pd.DataFrame]:
+    build_kept_releases(con)
+    con.execute("""CREATE OR REPLACE TABLE dq_issues (
+        check_id VARCHAR, check_name VARCHAR, severity VARCHAR, ocid VARCHAR,
+        record_id VARCHAR, detail VARCHAR)""")
+    for chk in CHECKS:
+        con.execute(
+            f"INSERT INTO dq_issues SELECT ?, ?, ?, * FROM ({chk.sql})",
+            [chk.id, chk.name, chk.severity],
+        )
+    con.execute(ANALYTICAL_LAYER)
+
+    counts = con.execute(
+        "SELECT check_id, count(*) AS n FROM dq_issues GROUP BY 1"
+    ).df().set_index("check_id")["n"].to_dict()
+    summary = pd.DataFrame(
+        [
+            {"check_id": c.id, "check": c.name, "severity": c.severity,
+             "records": int(counts.get(c.id, 0)), "effect": c.effect}
+            for c in CHECKS
+        ]
+    )
+
+    comp_rows = []
+    for table, col in COMPLETENESS:
+        total, missing = con.execute(
+            f"""SELECT count(*), count(*) FILTER (WHERE {col} IS NULL)
+                FROM {table} WHERE release_key IN (SELECT release_key FROM dq_kept_releases)"""
+        ).fetchone()
+        comp_rows.append({"table": table, "field": col, "rows": total, "missing": missing,
+                          "missing_pct": round(100 * missing / total, 2) if total else None})
+    completeness = pd.DataFrame(comp_rows)
+
+    volumes = con.execute("""
+        SELECT 'releases (raw)' AS layer, count(*) AS n FROM releases
+        UNION ALL SELECT 'processes kept (one per OCID)', count(*) FROM dq_kept_releases
+        UNION ALL SELECT 'processes in analytical layer', count(*) FROM f_process
+        UNION ALL SELECT 'awards in analytical layer', count(*) FROM f_award
+        UNION ALL SELECT 'awards with usable amount', count(amount) FROM f_award
+        UNION ALL SELECT 'contracts in analytical layer', count(*) FROM f_contract
+    """).df()
+    return {"summary": summary, "completeness": completeness, "volumes": volumes}
+
+
+def _md_table(df: pd.DataFrame) -> str:
+    cols = list(df.columns)
+    lines = ["| " + " | ".join(cols) + " |", "|" + "|".join("---" for _ in cols) + "|"]
+    for row in df.itertuples(index=False):
+        lines.append("| " + " | ".join("" if pd.isna(v) else str(v) for v in row) + " |")
+    return "\n".join(lines)
+
+
+def write_quality_report(results: dict[str, pd.DataFrame], out_dir, docs_dir,
+                         source_label: str) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for name, df in results.items():
+        df.to_csv(out_dir / f"dq_{name}.csv", index=False)
+    summary = results["summary"]
+    crit = int(summary.loc[summary.severity == "critical", "records"].sum())
+    warn = int(summary.loc[summary.severity == "warning", "records"].sum())
+    md = f"""# Data quality report
+
+> **Signals, never accusations.** An alert means *"this deserves a review"*, not *"there is an
+> irregularity"*. That applies to data-quality findings too: a defect is usually a publication or
+> capture problem, not misconduct.
+
+**Source:** {source_label}
+
+Before controlling the data, we control its quality. Every check below is executed on the
+flattened OCDS tables; its *effect* column says what the analytical layer does with the records it
+finds. **{crit}** records hit critical checks and **{warn}** hit warning checks.
+
+## Volumes through the pipeline
+
+{_md_table(results["volumes"])}
+
+## Checks
+
+{_md_table(summary)}
+
+## Field completeness (latest release per OCID)
+
+Tender periods are expected to be empty for minor and direct purchases, which have no call for
+bids; their missing rate therefore mirrors the share of non-competitive processes.
+
+{_md_table(results["completeness"])}
+
+## How the checks feed the controls
+
+* Critical findings remove the record, or only the broken field, from the `f_*` views that every
+  control reads. A negative amount, for example, does not remove the process from the single-bid
+  control, but it is excluded from Benford and from the price-outlier control.
+* Warnings are reported only. They are listed so the data owner can fix them at source.
+* The full list of offending records is in the `dq_issues` table of the DuckDB warehouse. Only the
+  counts are versioned in `outputs/quality/`.
+"""
+    (docs_dir / "data-quality.md").write_text(md, encoding="utf-8")

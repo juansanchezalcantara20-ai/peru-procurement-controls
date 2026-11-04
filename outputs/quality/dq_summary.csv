@@ -1,0 +1,16 @@
+check_id,check,severity,records,effect
+DQ01,Duplicate OCID (more than one release per process),warning,15,Only the latest release per OCID is kept (ties: last line in file).
+DQ02,Missing buyer identifier,critical,8,Process excluded from every control (no entity to attribute it to).
+DQ03,Award without supplier,critical,0,Award excluded from supplier-based controls.
+DQ04,Negative or zero award amount,critical,10,Award amount set to NULL in the analytical layer.
+DQ05,Absurd award amount,critical,5,"Award amount set to NULL (>100x tender estimate or >S/ 10,000,000,000)."
+DQ06,Award currency is not PEN,critical,6,Amount set to NULL (no FX conversion is attempted).
+DQ07,Tender period ends before it starts,critical,3,Tender period set to NULL (excluded from the submission-period control).
+DQ08,Award dated before the bid deadline,warning,0,Reported only.
+DQ09,Contract signed before its award,critical,10,Signature date set to NULL (excluded from the award-to-signature control).
+DQ10,Date outside the plausible range,warning,0,Reported only (range 2000-01-01 to 2030-12-31).
+DQ11,Duplicate award identifier within a process,warning,0,Reported only.
+DQ12,Same party id with different names,warning,0,Reported only (name variants are common in registries).
+DQ13,Item without classification,warning,0,Item excluded from the category-median price control.
+DQ14,Contract whose awardID matches no award,warning,0,Reported only.
+DQ15,numberOfTenderers disagrees with published bids,warning,0,Reported only; the analytical layer uses the count of distinct bidders when available.

@@ -1,0 +1,19 @@
+{
+  "source": "synthetic",
+  "synthetic": {
+    "releases": 12580,
+    "processes": 12565,
+    "injected": 784,
+    "dq_defects": 57
+  },
+  "ingest_counts": {
+    "releases": 12580,
+    "processes": 12580,
+    "items": 16312,
+    "parties": 37034,
+    "bids": 24454,
+    "awards": 12580,
+    "contracts": 12580,
+    "amendments": 708
+  }
+}

@@ -1,0 +1,16 @@
+site_name: Peru procurement controls
+site_description: Continuous-control analytics on Peruvian public procurement (OCDS) - signals, never accusations.
+repo_url: https://github.com/juansanchezalcantara20-ai/peru-procurement-controls
+theme:
+  name: material
+  features: [navigation.sections, navigation.top, content.tables]
+  palette:
+    - scheme: default
+      toggle: { icon: material/brightness-7, name: Dark mode }
+    - scheme: slate
+      toggle: { icon: material/brightness-4, name: Light mode }
+markdown_extensions: [tables, admonition, attr_list, md_in_html, toc]
+nav:
+  - Overview: index.md
+  - Data quality: data-quality.md
+  - Decisions: DECISIONS.md

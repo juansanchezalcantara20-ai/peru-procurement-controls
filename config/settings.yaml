@@ -1,0 +1,45 @@
+# Pipeline settings. Paths are relative to the repository root.
+
+# Data source:
+#   synthetic   - Plan C: OCDS-shaped synthetic data with injected risk patterns (default; offline)
+#   oece        - Plan A: OECE (ex-OSCE) OCDS publication from the OCP Data Registry
+#   perucompras - Plan B: Perú Compras OCDS publication from the OCP Data Registry
+#   auto        - try oece, then perucompras, then fall back to synthetic
+source: synthetic
+
+years: [2024, 2025]          # most recent complete years
+currency: PEN
+
+paths:
+  raw_dir: data/raw          # git-ignored; downloads and full synthetic files land here
+  sample_dir: data/sample    # small versioned samples
+  warehouse: data/warehouse/procurement.duckdb   # git-ignored
+  outputs: outputs           # aggregated, versioned results
+  docs: docs                 # MkDocs site source
+
+# OCP Data Registry downloads (Plan A/B). The registry serves one JSON Lines file per year per
+# publication. Publication ids are NOT hard-coded from memory: look them up at
+# https://data.open-contracting.org/en/search/ and fill them in (status: to_verify).
+registry:
+  base_url: "https://data.open-contracting.org/en/publication/{publication_id}/download?name={year}.jsonl.gz"
+  publications:
+    oece: { publication_id: null, status: to_verify, note: "Peru - OECE (ex-OSCE) SEACE publication" }
+    perucompras: { publication_id: null, status: to_verify, note: "Peru - Perú Compras (framework agreements)" }
+
+privacy:
+  # Natural persons (RUC starting with 10, 15 or 17, or DNI identifiers) are pseudonymised with
+  # HMAC-SHA256 before anything is written to the warehouse. The key comes from this environment
+  # variable; when it is not set a public demo key is used and a warning is printed.
+  salt_env_var: PROCONTROL_SALT
+  natural_person_ruc_prefixes: ["10", "15", "17"]
+
+synthetic:
+  seed: 20251231
+  n_buyers: 40
+  n_suppliers: 900
+  natural_person_share: 0.18
+  processes_per_buyer_year: 150
+
+validation:
+  review_sample_size: 20
+  review_seed: 7
