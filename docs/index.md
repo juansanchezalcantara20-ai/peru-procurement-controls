@@ -1,47 +1,65 @@
-# Peru procurement controls
+# Controles sobre las compras públicas del Perú
 
-!!! warning "Signals, never accusations"
-    An alert means *"this deserves a review"*, not *"there is an irregularity"*. No supplier,
-    official or person is ranked or named; public entities appear only in aggregated views.
+!!! warning "Señales, nunca acusaciones"
+    Una alerta significa **«este caso merece revisión»**, no «hay una irregularidad». Este sitio
+    no nombra ni ordena a ningún proveedor, funcionario o persona; las entidades públicas solo
+    aparecen agrupadas.
 
+!!! note "Datos simulados"
+    Todas las cifras de este sitio vienen de **datos simulados**: un conjunto inventado con la
+    misma estructura que las compras públicas reales, en el que se sembraron casos de riesgo a
+    propósito para comprobar que las señales los encuentran. No describe a ninguna entidad real.
+    Cuando corran los datos reales, este aviso cambiará solo.
 
-!!! info "Data: synthetic (Plan C)"
-    The build environment could not reach the OCP Data Registry or the OECE portal, so every
-    figure on this site comes from a **seeded synthetic OCDS dataset** with injected, known risk
-    patterns. It describes no real entity. The pipeline runs unchanged on the real publications
-    (`procontrol run --source oece`).
+## Qué es esto
 
+Es un sistema de alertas que revisa las compras del Estado peruano y marca los casos que conviene
+mirar con más cuidado: compras partidas para evitar un concurso, concursos con una sola oferta,
+contratos que crecen demasiado, precios muy por encima de lo normal, entre otros. Cada alerta
+viene con la razón por la que saltó y con lo que un revisor debería pedir primero. Está pensado
+para gerentes de logística, de control interno o de administración que necesitan decidir qué
+expedientes revisar, sin tener que saber estadística ni programación.
 
-Continuous-control analytics on Peruvian public procurement, published in the Open Contracting
-Data Standard (OCDS). Each control is a written rule with a threshold, an owner role and an
-expected false-positive rate, the way an internal-control or continuous-auditing function works.
+## Una alerta de ejemplo
 
-## At a glance
+!!! example "Caso inventado para explicar cómo funciona"
+    **Lo que pasó.** Entre el 3 y el 22 de mayo, la *Municipalidad Distrital de Villa Ejemplo
+    (entidad inventada)* hizo cinco compras de servicios de transporte a *Transportes Ficticios
+    S.A.C. (proveedor inventado)*. Cada una costó entre S/ 36,700 y S/ 40,300, justo debajo de
+    S/ 41,200: el monto a partir del cual la ley exige un procedimiento competitivo. Ese monto
+    equivale a 8 UIT (Unidad Impositiva Tributaria, un valor de referencia que el Estado fija cada
+    año; en 2024 era S/ 5,150).
 
-| | |
-|---|---|
-| Period | 2024-2025 |
-| Contracting processes (clean layer) | 12,554 (5,677 competitive) |
-| Awarded amount | S/ 15,624.0 million |
-| Public entities (aggregated only) | 40 |
-| Controls running | 9 (8 per process, 1 aggregate) |
-| Alerts | 2,173 on 1,937 processes (15.4%) |
-| Review priority P1 | 178 processes |
-| Thresholds still to verify | 8 (listed in `config/thresholds.yaml`) |
+    **Por qué saltó la señal.** Cinco compras al mismo proveedor, del mismo rubro, en menos de un
+    mes y todas pegadas al límite. Juntas suman S/ 192,000, casi cinco veces el límite: si se
+    hubieran pedido de una vez, la ley habría exigido un concurso con varios competidores. Por eso
+    la señal [compras partidas para no hacer concurso](senales/compras-partidas.md) le dio a cada compra
+    prioridad media.
 
-Against the injected patterns, the process controls reach a mean recall of **99%**. Their share of alerts on neutral background ranges from **5%** to **82%**: see [Validation](validation.md).
+    **Qué haría un revisor.** Pediría los requerimientos de las cinco compras para ver si eran una
+    sola necesidad, revisaría quién autorizó cada orden y si hubo cotizaciones de otros
+    proveedores. Si era una sola necesidad partida en cinco, es una observación de control. Si
+    eran necesidades distintas que surgieron en momentos distintos, archiva la alerta como falsa
+    alarma y anota el motivo.
 
-![Processes flagged by each control](assets/charts/alerts_by_control.png)
+## Las cifras principales
 
-## How to read this site
+- **Periodo revisado:** de 2024 a 2025 <small>(datos simulados)</small>
+- **Procesos de compra revisados:** 12,554, de los cuales 5,677 fueron concursos abiertos <small>(datos simulados)</small>
+- **Monto adjudicado:** S/ 15,624.0 millones <small>(datos simulados)</small>
+- **Entidades públicas:** 40, que en este sitio solo se muestran agrupadas por tipo <small>(datos simulados)</small>
+- **Procesos con al menos una alerta:** 1,937, es decir 15 de cada 100 procesos <small>(datos simulados)</small>
+- **Procesos de prioridad alta** (los primeros que conviene revisar): 178 <small>(datos simulados)</small>
+- **Señales funcionando:** 8 que revisan cada proceso, más una que revisa el conjunto de montos de cada entidad
 
-1. **[Data quality](data-quality.md)** comes first, because a control is only as good as its
-   data.
-2. **[Control catalog](controls/index.md)** has one page per signal: objective, rule,
-   threshold, owner, evidence, expected false positives, the distribution behind it and the
-   exact SQL.
-3. **[Risk score](risk-score.md)** shows how alerts combine into a review priority.
-4. **[Trends](trends.md)** shows how signals move over time, aggregated.
-5. **[Validation](validation.md)** shows how well each control finds planted patterns, and a
-   blind review of 20 alerts.
-6. **[Decisions](DECISIONS.md)** gives every design choice and why.
+![Procesos marcados por cada señal](assets/charts/alertas_por_senal.png)
+
+*Cómo leerlo:* cada barra es una señal y su largo es la cantidad de procesos que marcó. Que una señal marque muchos procesos no la hace más importante: las más frecuentes suelen ser también las que más falsas alarmas dan, y por eso pesan menos en la prioridad.
+
+## Por dónde seguir
+
+- [Las señales en lenguaje simple](senales/index.md): qué busca cada una, un ejemplo y qué hacer cuando aparece.
+- [¿Funciona?](funciona.md): cómo se comprobó que las señales encuentran lo que deben y cuántas falsas alarmas dan.
+- [De dónde salen los datos](datos.md): la fuente, su calidad y lo que este proyecto no es.
+- [Glosario](glosario.md): cada término y cada sigla explicados con un ejemplo.
+- [Metodología](metodologia/index.md): las fórmulas y decisiones, para quien las quiera.

@@ -12,6 +12,7 @@ import duckdb
 
 from .config import Config
 from .download import DownloadError, download, write_sample
+from .gates import write_protected_names
 from .ingest import ingest_files
 from .privacy import Pseudonymiser
 from .quality import run_quality, write_quality_report
@@ -27,8 +28,9 @@ SOURCE_LABELS = {
 
 
 class Pipeline:
-    def __init__(self, cfg: Config | None = None):
+    def __init__(self, cfg: Config | None = None, years: list[int] | None = None):
         self.cfg = cfg or Config.load()
+        self.years = years
         self.state_file = self.cfg.path("outputs") / "run_metadata.json"
         self.meta: dict = {}
 
@@ -36,18 +38,21 @@ class Pipeline:
     def acquire(self) -> list[Path]:
         source = self.cfg.settings["source"]
         order = ["oece", "perucompras", "synthetic"] if source == "auto" else [source]
+        errors = []
         for src in order:
             if src == "synthetic":
                 info = generate(self.cfg)
                 self.meta.update(source="synthetic", synthetic=info)
+                self.meta.pop("download", None)
                 return [Path(info["path"])]
             try:
-                paths = download(self.cfg, src)
-                self.meta.update(source=src, files=[str(p) for p in paths])
+                paths, record = download(self.cfg, src, self.years)
+                self.meta.update(source=src, files=[str(p) for p in paths], download=record)
                 return paths
             except DownloadError as exc:
-                log.warning("Source %s unavailable: %s", src, exc)
-        raise RuntimeError("No data source available")
+                log.warning("La fuente %s no está disponible: %s", src, exc)
+                errors.append(f"{src}: {exc}")
+        raise DownloadError("Ninguna fuente de datos está disponible. " + " | ".join(errors))
 
     def connect(self) -> duckdb.DuckDBPyConnection:
         wh = self.cfg.path("warehouse")
@@ -62,7 +67,7 @@ class Pipeline:
     def run(self, steps: list[str] | None = None) -> dict:
         steps = steps or ["acquire", "ingest", "quality", "signals", "validate", "report"]
         for item in self.cfg.to_verify():
-            log.warning("threshold to verify: %s", item)
+            log.warning("umbral por verificar: %s", item)
         paths: list[Path] = []
         pseudo = self.pseudonymiser()
         if "acquire" in steps:
@@ -73,7 +78,11 @@ class Pipeline:
         con = self.connect()
         try:
             if "ingest" in steps:
-                self.meta["ingest_counts"] = ingest_files(con, paths, pseudo)
+                names: set[str] = set()
+                self.meta["ingest_counts"] = ingest_files(con, paths, pseudo, names)
+                allowed = self.cfg.settings.get("site", {}).get("allowed_institution_names", [])
+                self.meta["protected_names"] = write_protected_names(
+                    names, self.cfg.path("warehouse").parent / "protected_names.txt", allowed)
                 write_sample(paths[0], self.cfg.path("sample_dir") / f"{self.meta['source']}_sample.jsonl",
                              pseudo, n=50)
             if "quality" in steps:
@@ -84,7 +93,7 @@ class Pipeline:
             for step in ("signals", "validate", "report"):
                 if step in steps:
                     if importlib.util.find_spec(f"procontrol.{_MODULES[step]}") is None:
-                        log.info("step %s not available yet - skipped", step)
+                        log.info("el paso %s aún no existe; se omite", step)
                         continue
                     mod = importlib.import_module(f"procontrol.{_MODULES[step]}")
                     self.meta[step] = mod.run(self.cfg, con, self.meta)

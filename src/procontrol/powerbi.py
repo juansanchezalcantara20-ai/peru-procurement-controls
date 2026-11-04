@@ -12,16 +12,13 @@ import duckdb
 import pandas as pd
 
 from .engine import load_catalog
+from .labels import entity_type
 
 TABLES = {
     "dim_date": """
         SELECT DISTINCT CAST(process_date AS DATE) AS date, year(process_date) AS year,
                month(process_date) AS month, strftime(process_date, '%Y-%m') AS year_month
         FROM f_process WHERE process_date IS NOT NULL""",
-    "dim_entity": """
-        SELECT p.buyer_id AS entity_key,
-               coalesce(regexp_extract(any_value(pa.name), '\\((.*)\\)', 1), 'Unknown') AS entity_type
-        FROM f_process p LEFT JOIN parties pa ON pa.party_id = p.buyer_id GROUP BY 1""",
     "dim_supplier": """
         SELECT party_id AS supplier_key, bool_or(is_natural_person) AS is_natural_person
         FROM parties WHERE roles LIKE '%tenderer%' OR roles LIKE '%supplier%' GROUP BY 1""",
@@ -54,6 +51,10 @@ def export(cfg, con: duckdb.DuckDBPyConnection) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     for name, sql in TABLES.items():
         con.execute(sql).df().to_csv(out / f"{name}.csv", index=False)
+    ent = con.execute("""SELECT p.buyer_id AS entity_key, any_value(pr.buyer_name) AS name
+                         FROM f_process p JOIN processes pr USING (ocid) GROUP BY 1""").df()
+    ent["entity_type"] = ent.pop("name").map(entity_type)
+    ent.to_csv(out / "dim_entity.csv", index=False)
     catalog = load_catalog(cfg)
     pd.DataFrame([{
         "control_id": c["id"], "name": c["name"], "level": c["level"], "weight": c["weight"],

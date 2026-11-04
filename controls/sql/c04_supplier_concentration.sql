@@ -1,4 +1,4 @@
--- C04 Supplier concentration by entity and category (HHI on awarded amount).
+-- C04 Concentración de proveedores por entidad y categoría (HHI sobre el monto adjudicado).
 WITH by_supplier AS (
     SELECT buyer_id, segment, year, supplier_id, sum(amount) AS amt, count(*) AS n
     FROM f_award WHERE amount IS NOT NULL

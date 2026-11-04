@@ -1,35 +1,49 @@
-# Pipeline settings. Paths are relative to the repository root.
+# Configuración del proceso. Las rutas son relativas a la raíz del repositorio.
 
-# Data source:
-#   synthetic   - Plan C: OCDS-shaped synthetic data with injected risk patterns (default; offline)
-#   oece        - Plan A: OECE (ex-OSCE) OCDS publication from the OCP Data Registry
-#   perucompras - Plan B: Perú Compras OCDS publication from the OCP Data Registry
-#   auto        - try oece, then perucompras, then fall back to synthetic
+# Fuente de datos:
+#   synthetic   - Plan C: datos simulados con estructura OCDS y patrones de riesgo sembrados
+#                 (por defecto; no necesita internet)
+#   oece        - Plan A: publicación OCDS del OECE en el registro de datos de Open Contracting Partnership
+#   perucompras - Plan B: publicación OCDS de Perú Compras en el mismo registro
+#   auto        - intenta oece, luego perucompras, y si ambas fallan usa datos simulados
 source: synthetic
 
-years: [2024, 2025]          # most recent complete years
+years: [2024, 2025]          # años completos más recientes
 currency: PEN
 
 paths:
-  raw_dir: data/raw          # git-ignored; downloads and full synthetic files land here
-  sample_dir: data/sample    # small versioned samples
-  warehouse: data/warehouse/procurement.duckdb   # git-ignored
-  outputs: outputs           # aggregated, versioned results
-  docs: docs                 # MkDocs site source
+  raw_dir: data/raw          # ignorado por git; aquí caen las descargas y los datos simulados completos
+  sample_dir: data/sample    # muestras pequeñas versionadas
+  warehouse: data/warehouse/procurement.duckdb   # ignorado por git
+  outputs: outputs           # resultados agregados y versionados
+  docs: docs                 # fuente del sitio MkDocs
 
-# OCP Data Registry downloads (Plan A/B). The registry serves one JSON Lines file per year per
-# publication. Publication ids are NOT hard-coded from memory: look them up at
-# https://data.open-contracting.org/en/search/ and fill them in (status: to_verify).
+# Descargas del registro de datos de Open Contracting Partnership (Planes A y B).
+# El registro entrega un archivo JSON Lines comprimido por año y por publicación:
+#   https://data.open-contracting.org/en/publication/<id>/download?name=<año>.jsonl.gz
+# (comprobado en el código fuente del registro, github.com/open-contracting/data-registry,
+#  el 2026-11-04: responde 400 si el nombre no es válido, 404 si ese archivo no existe y redirige
+#  al servidor de descargas si existe). Cada línea es una «compiled release» de OCDS.
 registry:
-  base_url: "https://data.open-contracting.org/en/publication/{publication_id}/download?name={year}.jsonl.gz"
+  base_url: "https://data.open-contracting.org/en/publication/{publication_id}/download?name={name}"
+  publications_api: "https://data.open-contracting.org/en/publications.json"
   publications:
-    oece: { publication_id: null, status: to_verify, note: "Peru - OECE (ex-OSCE) SEACE publication" }
-    perucompras: { publication_id: null, status: to_verify, note: "Peru - Perú Compras (framework agreements)" }
+    oece:
+      publication_id: 135
+      label: "OECE (ex OSCE), sistema SEACE"
+      status: provided_by_owner   # dato entregado por el dueño del proyecto el 2026-11-04
+    perucompras:
+      publication_id: 78
+      label: "Perú Compras (acuerdos marco)"
+      status: provided_by_owner
+  retries: 5                 # reintentos por archivo ante cortes o errores 5xx
+  timeout_seconds: 120       # tiempo máximo sin recibir datos
+  backoff_seconds: 10        # espera antes del primer reintento; se duplica en cada intento
 
 privacy:
-  # Natural persons (RUC starting with 10, 15 or 17, or DNI identifiers) are pseudonymised with
-  # HMAC-SHA256 before anything is written to the warehouse. The key comes from this environment
-  # variable; when it is not set a public demo key is used and a warning is printed.
+  # Las personas naturales (RUC que empieza con 10, 15 o 17, o identificadores DNI) se reemplazan
+  # por un seudónimo con HMAC-SHA256 antes de escribir nada en el almacén. La clave sale de esta
+  # variable de entorno; si no está definida se usa una clave de demostración pública y se avisa.
   salt_env_var: PROCONTROL_SALT
   natural_person_ruc_prefixes: ["10", "15", "17"]
 
@@ -43,3 +57,18 @@ synthetic:
 validation:
   review_sample_size: 20
   review_seed: 7
+
+site:
+  # Mínimo de entidades por grupo en cualquier vista agregada: un grupo con menos entidades
+  # se fusiona en «Otras entidades» para que ninguna se pueda identificar.
+  min_entities_per_group: 3
+  # Instituciones que el sitio nombra a propósito como contexto (quién publica los datos, qué es
+  # una sigla), nunca como compradoras ni en un ranking. La prueba de privacidad no las bloquea
+  # aunque también aparezcan como entidades compradoras en los datos.
+  allowed_institution_names:
+    - "Organismo Especializado para las Contrataciones Públicas Eficientes"
+    - "Organismo Supervisor de las Contrataciones del Estado"
+    - "Superintendencia Nacional de Aduanas y de Administración Tributaria"
+    - "Sistema Electrónico de Contrataciones del Estado"
+    - "Perú Compras"
+    - "Open Contracting Partnership"

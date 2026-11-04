@@ -1,4 +1,4 @@
--- C06 Contract amendments that raise the amount above the cap.
+-- C06 Modificaciones contractuales que suben el monto por encima del tope.
 SELECT c.ocid, c.buyer_id, c.supplier_id, c.year,
        least(1.0, (c.final_amount / c.original_amount - 1 - $cap) / (1 - $cap)) AS severity,
        c.contract_id AS scope_key,

@@ -1,4 +1,4 @@
--- C05 Same winner repeated at the same entity (competitive processes).
+-- C05 El mismo ganador repetido en la misma entidad (procesos competitivos).
 WITH bids AS (
     SELECT buyer_id, supplier_id, year, count(DISTINCT ocid) AS n_bids
     FROM f_bid WHERE is_competitive GROUP BY ALL

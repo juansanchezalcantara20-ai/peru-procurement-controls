@@ -1,28 +1,27 @@
-# Power BI model
+# Modelo de Power BI
 
-The Power BI version mirrors the pipeline. The SQL controls compute the alerts, and Power BI only
-reads, filters and aggregates them. Every measure is in [`measures.dax`](measures.dax).
+La versión en Power BI refleja el proceso. Los controles en SQL calculan las alertas; Power BI solo
+las lee, las filtra y las agrega. Todas las medidas están en [`measures.dax`](measures.dax).
 
-> **Signals, never accusations.** Every report page carries the `Disclaimer` card. There are no
-> visuals that rank suppliers, officials or named people. Entities appear only aggregated, by
-> type, segment, method or month.
+> **Señales, nunca acusaciones.** Cada página del informe lleva la tarjeta `Aviso`. No hay visuales
+> que ordenen proveedores, funcionarios ni personas con nombre propio. Las entidades aparecen solo
+> agregadas, por tipo, segmento, método o mes.
 
-## 1. Get the data
+## 1. Obtener los datos
 
 ```bash
-make pipeline          # writes outputs/powerbi/*.csv (git-ignored: alert-level data)
+make pipeline          # escribe outputs/powerbi/*.csv (ignorados por git: datos a nivel de alerta)
 ```
 
-In Power BI Desktop: *Get data → Text/CSV* for each file in `outputs/powerbi/`. Alternatively,
-use *Folder* and split by file name. Set `date` columns to Date and `is_competitive` / `flag` /
-`is_natural_person` to True/False.
+En Power BI Desktop: *Obtener datos → Texto/CSV* para cada archivo de `outputs/powerbi/`, o
+*Carpeta* y separar por nombre de archivo. Ponga las columnas `date` como Fecha y `is_competitive`,
+`flag` e `is_natural_person` como Verdadero/Falso.
 
-## 2. Star schema
+## 2. Esquema en estrella
 
 ```
                  dim_date (date)            dim_control (control_id)
                       │ 1                          │ 1
-                      │                            │
                       ▼ *                          ▼ *
 dim_entity ──1──*  fact_process (ocid) ──1──*  fact_alert
 (entity_key)          │ *     │ 1  ──1──1  fact_risk_score
@@ -31,54 +30,56 @@ dim_method ──1────────┘       │ 1  ──1──*  fact_
 dim_segment ──1───────────────┘
 dim_supplier ──1──* fact_process (supplier_key)
 
-fact_benford  - standalone (aggregate test; never related to processes)
+fact_benford  - independiente (prueba agregada; nunca se relaciona con procesos)
 ```
 
-| From | To | Cardinality | Filter direction |
+| Desde | Hacia | Cardinalidad | Dirección del filtro |
 |---|---|---|---|
-| `fact_process[date]` | `dim_date[date]` | many-to-one | single |
-| `fact_process[entity_key]` | `dim_entity[entity_key]` | many-to-one | single |
-| `fact_process[method]` | `dim_method[method]` | many-to-one | single |
-| `fact_process[segment]` | `dim_segment[segment]` | many-to-one | single |
-| `fact_process[supplier_key]` | `dim_supplier[supplier_key]` | many-to-one | single |
-| `fact_alert[ocid]` | `fact_process[ocid]` | many-to-one | single (process → alert) |
-| `fact_alert[control_id]` | `dim_control[control_id]` | many-to-one | single |
-| `fact_risk_score[ocid]` | `fact_process[ocid]` | one-to-one | single (process → score) |
-| `fact_contract[ocid]` | `fact_process[ocid]` | many-to-one | single |
-| `fact_dq_issue[ocid]` | `fact_process[ocid]` | many-to-one | single |
+| `fact_process[date]` | `dim_date[date]` | muchos a uno | única |
+| `fact_process[entity_key]` | `dim_entity[entity_key]` | muchos a uno | única |
+| `fact_process[method]` | `dim_method[method]` | muchos a uno | única |
+| `fact_process[segment]` | `dim_segment[segment]` | muchos a uno | única |
+| `fact_process[supplier_key]` | `dim_supplier[supplier_key]` | muchos a uno | única |
+| `fact_alert[ocid]` | `fact_process[ocid]` | muchos a uno | única (proceso → alerta) |
+| `fact_alert[control_id]` | `dim_control[control_id]` | muchos a uno | única |
+| `fact_risk_score[ocid]` | `fact_process[ocid]` | uno a uno | única (proceso → puntaje) |
+| `fact_contract[ocid]` | `fact_process[ocid]` | muchos a uno | única |
+| `fact_dq_issue[ocid]` | `fact_process[ocid]` | muchos a uno | única |
 
-Mark `dim_date` as the date table. Hide every key column in report view. Hide `dim_supplier` and
-`fact_process[supplier_key]` entirely. They exist only so that `[HHI]` can iterate suppliers, and
-no visual may put suppliers on an axis.
+Marque `dim_date` como tabla de fechas. Oculte todas las columnas clave en la vista de informe.
+Oculte `dim_supplier` y `fact_process[supplier_key]` por completo: existen solo para que
+`[Índice de concentración (HHI)]` recorra proveedores, y ningún visual puede poner proveedores en un eje.
 
-## 3. Suggested pages
+## 3. Páginas sugeridas
 
-1. **Overview** - cards for `[Processes]`, `[Awarded Amount (PEN)]`, `[% Processes Flagged]`,
-   `[P1 Processes]` and `[Disclaimer]`; a bar of `[Flagged Processes]` by `dim_control[name]`.
-2. **Data quality** - `[DQ Critical Issues]` and `[DQ Warning Issues]` by `fact_dq_issue[check_name]`.
-3. **One page per signal** - the distribution of its metric, for example `[HHI]` by
-   `dim_entity[entity_type]` × `dim_segment`, `[Single-Bid Rate]` by `dim_method`, or
-   `[Median Days Award to Signature]` by month. Use the control's slicers, and put its owner
-   role and expected false-positive band in a text box from `dim_control`.
-4. **Trends** - `[% Processes Flagged]` and `[% Flagged YoY (pp)]` by `dim_date[year_month]`.
-5. **Risk score** - a histogram of `fact_risk_score[score]` and a matrix of
-   `fact_risk_score[controls]` × `[Processes]`. Add a `dim_control` slicer to see
-   `[Risk Score (recomputed)]` without a given control.
+1. **Resumen**: tarjetas de `[Procesos]`, `[Monto adjudicado (S/)]`, `[% Procesos con alerta]`,
+   `[Procesos prioridad P1]` y `[Aviso]`; barras de `[Procesos con alerta]` por `dim_control[name]`.
+2. **Calidad del dato**: `[Problemas de datos críticos]` y `[Problemas de datos menores]` por
+   `fact_dq_issue[check_name]`.
+3. **Una página por señal**: la distribución de su medida, por ejemplo
+   `[Índice de concentración (HHI)]` por `dim_entity[entity_type]` × `dim_segment`,
+   `[Tasa de postor único]` por `dim_method` o `[Días hasta la firma (mediana)]` por mes. Agregue
+   un cuadro de texto con el rol dueño y la banda esperada de falsas alarmas de `dim_control`.
+4. **Tendencias**: `[% Procesos con alerta]` y `[Cambio frente al año anterior (puntos)]` por
+   `dim_date[year_month]`.
+5. **Puntaje de riesgo**: histograma de `fact_risk_score[score]` y una matriz de
+   `fact_risk_score[controls]` × `[Procesos]`. Agregue un segmentador de `dim_control` para ver
+   `[Puntaje recalculado]` sin un control.
 
-## 4. Equivalence with the pipeline
+## 4. Equivalencia con el proceso
 
-| Pipeline | Power BI |
+| Proceso | Power BI |
 |---|---|
-| `alerts` table (engine) | `fact_alert` (imported, not recomputed) |
-| noisy-OR score in `engine.compute_risk_scores` | `[Risk Score (recomputed)]` |
-| HHI in `controls/sql/c04_supplier_concentration.sql` | `[HHI]` |
-| single-bid rate used in the case review | `[Single-Bid Rate]`, `[Single-Bid Rate vs National]` |
-| `aggregate_tests` (Benford) | `fact_benford`, `[Benford MAD (all awards)]` |
+| tabla `alerts` (motor) | `fact_alert` (importada, no recalculada) |
+| puntaje «noisy-OR» en `engine.compute_risk_scores` | `[Puntaje recalculado]` |
+| HHI en `controls/sql/c04_supplier_concentration.sql` | `[Índice de concentración (HHI)]` |
+| tasa de postor único usada en la revisión de casos | `[Tasa de postor único]`, `[Postor único frente al país]` |
+| `aggregate_tests` (Benford) | `fact_benford`, `[Desviación Benford (todas las adjudicaciones)]` |
 
-The rules themselves (thresholds, windows, clusters) are not re-implemented in DAX. That is
-deliberate: a control is written once, in the catalog, and the BI layer reads its output.
+Las reglas (umbrales, ventanas, grupos) no se vuelven a programar en DAX. Es deliberado: un
+control se escribe una vez, en el catálogo, y la capa de BI lee su resultado.
 
-## 5. Privacy
+## 5. Privacidad
 
-Natural persons are already pseudonymised in the CSVs (`NP-<hash>`). The CSVs are alert-level,
-so keep the `.pbix` internal, or publish only pages built from aggregated visuals.
+Las personas naturales ya vienen seudonimizadas en los CSV (`NP-<hash>`). Los CSV están a nivel de
+alerta: mantenga el `.pbix` interno o publique solo páginas hechas con visuales agregados.

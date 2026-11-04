@@ -25,7 +25,9 @@ import pandas as pd
 from .config import Config, load_yaml
 
 REQUIRED_FIELDS = [
-    "id", "name", "ocp_reference", "control_objective", "risk_mitigated", "rule", "parameters",
+    "id", "name", "short_title", "plain_what", "plain_why", "plain_example", "plain_example_line",
+    "plain_check", "plain_action", "ocp_reference", "control_objective", "risk_mitigated", "rule",
+    "parameters",
     "threshold", "frequency", "owner_role", "evidence", "expected_false_positives", "weight",
     "weight_rationale", "level", "sql",
 ]
@@ -64,19 +66,19 @@ def validate_catalog(catalog: dict[str, Any], cfg: Config) -> None:
     for spec in catalog["controls"]:
         missing = [f for f in REQUIRED_FIELDS if f not in spec]
         if missing:
-            raise ValueError(f"control {spec.get('id')} misses fields {missing}")
+            raise ValueError(f"al control {spec.get('id')} le faltan los campos {missing}")
         if spec["id"] in ids:
-            raise ValueError(f"duplicate control id {spec['id']}")
+            raise ValueError(f"código de control repetido: {spec['id']}")
         ids.add(spec["id"])
         if spec["level"] not in ("process", "aggregate"):
-            raise ValueError(f"{spec['id']}: level must be process or aggregate")
+            raise ValueError(f"{spec['id']}: level debe ser process o aggregate")
         if not 0 <= float(spec["weight"]) <= 1:
-            raise ValueError(f"{spec['id']}: weight must be in [0, 1]")
+            raise ValueError(f"{spec['id']}: weight debe estar entre 0 y 1")
         if not (cfg.root / spec["sql"]).exists():
-            raise ValueError(f"{spec['id']}: SQL file {spec['sql']} not found")
+            raise ValueError(f"{spec['id']}: no existe el archivo SQL {spec['sql']}")
         for name, p in spec["parameters"].items():
             if "value" not in p and "ref" not in p:
-                raise ValueError(f"{spec['id']}.{name}: needs value or ref")
+                raise ValueError(f"{spec['id']}.{name}: necesita value o ref")
 
 
 def resolve_params(spec: dict[str, Any], cfg: Config) -> dict[str, Any]:
@@ -107,7 +109,7 @@ def render(cfg: Config, control: Control) -> tuple[str, dict[str, Any]]:
     used = set(_PARAM.findall(sql))
     missing = used - set(control.params)
     if missing:
-        raise ValueError(f"{control.id}: SQL uses undefined parameters {sorted(missing)}")
+        raise ValueError(f"{control.id}: el SQL usa parámetros no definidos {sorted(missing)}")
     binds = {k: v for k, v in control.params.items() if k in used}
     return sql, binds
 
@@ -117,7 +119,7 @@ def run_control(con: duckdb.DuckDBPyConnection, cfg: Config, control: Control) -
     df = con.execute(sql, binds).df()
     expected = PROCESS_COLUMNS if control.level == "process" else AGGREGATE_COLUMNS
     if list(df.columns) != expected:
-        raise ValueError(f"{control.id}: output columns {list(df.columns)} != {expected}")
+        raise ValueError(f"{control.id}: columnas de salida {list(df.columns)} distintas de {expected}")
     if control.level == "process":
         # rounded: parallel float sums are not bit-reproducible, published results must be
         df["severity"] = df["severity"].astype(float).clip(0.0, 1.0).round(4)

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import logging
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
@@ -26,6 +27,8 @@ import duckdb
 import pandas as pd
 
 from .privacy import Pseudonymiser
+
+log = logging.getLogger(__name__)
 
 SCHEMA = {
     "releases": [
@@ -104,29 +107,48 @@ def _ts(value: str | None) -> pd.Timestamp | None:
 
 
 def iter_releases(paths: Iterable[Path]) -> Iterator[dict]:
+    """Yield releases from JSON Lines(.gz) files. Malformed lines are skipped and counted; a
+    truncated archive stops with a clear message."""
     for path in paths:
         opener = gzip.open if str(path).endswith(".gz") else open
-        with opener(path, "rt", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                obj = json.loads(line)
-                # Accept release packages and record packages as well as bare releases.
-                if "releases" in obj and isinstance(obj["releases"], list):
-                    yield from obj["releases"]
-                elif "records" in obj:
-                    for rec in obj["records"]:
-                        if "compiledRelease" in rec:
-                            yield rec["compiledRelease"]
-                else:
-                    yield obj
+        bad = 0
+        try:
+            with opener(path, "rt", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except ValueError:
+                        bad += 1
+                        continue
+                    # Accept release packages and record packages as well as bare releases.
+                    if "releases" in obj and isinstance(obj["releases"], list):
+                        yield from obj["releases"]
+                    elif "records" in obj:
+                        for rec in obj["records"]:
+                            if "compiledRelease" in rec:
+                                yield rec["compiledRelease"]
+                    else:
+                        yield obj
+        except (EOFError, OSError) as exc:
+            raise RuntimeError(f"El archivo {path.name} está incompleto o dañado ({exc}). "
+                               "Bórrelo de data/raw y vuelva a descargarlo.") from exc
+        if bad:
+            log.warning("%s: se omitieron %s líneas que no eran JSON válido.", path.name, bad)
 
 
-def flatten(releases: Iterable[dict], pseudo: Pseudonymiser) -> dict[str, list[tuple]]:
+def flatten(releases: Iterable[dict], pseudo: Pseudonymiser, names: set[str] | None = None,
+            start: int = 1) -> dict[str, list[tuple]]:
+    """Flatten releases. If ``names`` is given, every person/organisation name seen in the raw
+    data (parties, contact points, buyer, tenderers, suppliers) is added to it, before
+    pseudonymisation, so the privacy gate can later check that none reaches the site."""
     rows: dict[str, list[tuple]] = {t: [] for t in SCHEMA}
-    for key, rel in enumerate(releases, start=1):
+    for key, rel in enumerate(releases, start=start):
         ocid = rel.get("ocid")
+        if names is not None:
+            _collect_names(rel, names)
         rows["releases"].append((key, ocid, rel.get("id"), _ts(rel.get("date"))))
 
         # parties first, so references can be resolved (and pseudonymised) consistently
@@ -208,8 +230,26 @@ def _item_row(key: int, ocid: str, source: str, award_id: str | None, it: dict) 
             unit_amt, cur)
 
 
-def load(con: duckdb.DuckDBPyConnection, rows: dict[str, list[tuple]]) -> dict[str, int]:
-    create_schema(con)
+def _collect_names(rel: dict, names: set[str]) -> None:
+    for party in rel.get("parties") or []:
+        if party.get("name"):
+            names.add(party["name"])
+        cp = party.get("contactPoint") or {}
+        if cp.get("name"):
+            names.add(cp["name"])
+    for org in [rel.get("buyer") or {}, *((rel.get("tender") or {}).get("tenderers") or [])]:
+        if org.get("name"):
+            names.add(org["name"])
+    for award in rel.get("awards") or []:
+        for org in award.get("suppliers") or []:
+            if org.get("name"):
+                names.add(org["name"])
+
+
+def load(con: duckdb.DuckDBPyConnection, rows: dict[str, list[tuple]],
+         create: bool = True) -> dict[str, int]:
+    if create:
+        create_schema(con)
     counts = {}
     for table, cols in SCHEMA.items():
         df = pd.DataFrame(rows[table], columns=[c for c, _ in cols])
@@ -221,6 +261,26 @@ def load(con: duckdb.DuckDBPyConnection, rows: dict[str, list[tuple]]) -> dict[s
     return counts
 
 
-def ingest_files(con: duckdb.DuckDBPyConnection, paths: list[Path],
-                 pseudo: Pseudonymiser) -> dict[str, int]:
-    return load(con, flatten(iter_releases(paths), pseudo))
+def ingest_files(con: duckdb.DuckDBPyConnection, paths: list[Path], pseudo: Pseudonymiser,
+                 names: set[str] | None = None, batch: int = 20_000) -> dict[str, int]:
+    """Stream the files in batches so multi-GB real publications fit in memory."""
+    create_schema(con)
+    totals = dict.fromkeys(SCHEMA, 0)
+    chunk: list[dict] = []
+    key = 1
+
+    def flush() -> None:
+        nonlocal key
+        counts = load(con, flatten(chunk, pseudo, names, start=key), create=False)
+        for t, n in counts.items():
+            totals[t] += n
+        key += len(chunk)
+        chunk.clear()
+
+    for rel in iter_releases(paths):
+        chunk.append(rel)
+        if len(chunk) >= batch:
+            flush()
+    if chunk:
+        flush()
+    return totals

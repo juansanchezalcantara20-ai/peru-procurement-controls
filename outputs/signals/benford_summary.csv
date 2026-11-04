@@ -1,6 +1,6 @@
 scope_type,conformity,beyond_sampling_noise,scopes,mean_mad,mean_mad_null,amounts
-all,acceptable conformity,True,1,0.0077,0.0021,12533.0
-buyer,acceptable conformity,False,3,0.0098,0.0108,1457.0
-buyer,marginal conformity,False,5,0.0131,0.0119,1965.0
-buyer,nonconformity,False,7,0.0195,0.0126,2479.0
-buyer,nonconformity,True,1,0.0293,0.0078,910.0
+all,conformidad aceptable,True,1,0.0077,0.0021,12533.0
+buyer,conformidad aceptable,False,3,0.0098,0.0108,1457.0
+buyer,conformidad marginal,False,5,0.0131,0.0119,1965.0
+buyer,no conformidad,False,7,0.0195,0.0126,2479.0
+buyer,no conformidad,True,1,0.0293,0.0078,910.0

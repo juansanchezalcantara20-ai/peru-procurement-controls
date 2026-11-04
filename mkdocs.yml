@@ -1,32 +1,47 @@
-site_name: Peru procurement controls
-site_description: Continuous-control analytics on Peruvian public procurement (OCDS) - signals, never accusations.
+site_name: Controles sobre las compras públicas del Perú
+site_description: Señales de riesgo en las compras públicas del Perú, explicadas en simple. Señales, nunca acusaciones.
+site_url: https://juansanchezalcantara20-ai.github.io/peru-procurement-controls/
 repo_url: https://github.com/juansanchezalcantara20-ai/peru-procurement-controls
+repo_name: Código en GitHub
+copyright: Juan Luis Sánchez Alcántara · Señales, nunca acusaciones
 theme:
   name: material
+  language: es
   features: [navigation.sections, navigation.top, content.tables]
   palette:
     - scheme: default
-      toggle: { icon: material/brightness-7, name: Dark mode }
+      toggle: { icon: material/brightness-7, name: Modo oscuro }
     - scheme: slate
-      toggle: { icon: material/brightness-4, name: Light mode }
-markdown_extensions: [tables, admonition, attr_list, md_in_html, toc]
+      toggle: { icon: material/brightness-4, name: Modo claro }
+extra:
+  generator: false
+markdown_extensions:
+  - tables
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc
+  - pymdownx.details
+  - pymdownx.superfences
 nav:
-  - Overview: index.md
-  - Data quality: data-quality.md
-  - Control catalog:
-      - controls/index.md
-      - C01 Split purchases: controls/c01.md
-      - C02 Single bidder: controls/c02.md
-      - C03 Short submission period: controls/c03.md
-      - C04 Supplier concentration (HHI): controls/c04.md
-      - C05 Repeated winner: controls/c05.md
-      - C06 Amendment increase: controls/c06.md
-      - C07 Price outlier: controls/c07.md
-      - C08 Benford (aggregate): controls/c08.md
-      - C09 Award-to-signature time: controls/c09.md
-  - Risk score: risk-score.md
-  - Trends: trends.md
-  - Validation: validation.md
-  - Decisions: DECISIONS.md
+  - Inicio: index.md
+  - Las señales:
+      - Las señales en lenguaje simple: senales/index.md
+      - Compras partidas para no hacer concurso: senales/compras-partidas.md
+      - Un solo postor en un concurso abierto: senales/un-solo-postor.md
+      - Plazo demasiado corto para ofertar: senales/plazo-corto.md
+      - Un proveedor concentra las compras: senales/concentracion.md
+      - El mismo ganador una y otra vez: senales/ganador-repetido.md
+      - Contratos que crecen demasiado: senales/contratos-que-crecen.md
+      - Precios muy por encima de lo normal: senales/precios-atipicos.md
+      - Montos que no parecen naturales: senales/montos-poco-naturales.md
+      - Demora en la firma del contrato: senales/demora-en-la-firma.md
+  - ¿Funciona?: funciona.md
+  - De dónde salen los datos: datos.md
+  - Glosario: glosario.md
+  - Metodología:
+      - Metodología: metodologia/index.md
+      - Calidad del dato (detalle técnico): metodologia/calidad.md
+      - Registro de decisiones: metodologia/decisiones.md
 not_in_nav: |
   validation/review_judgments.yaml
