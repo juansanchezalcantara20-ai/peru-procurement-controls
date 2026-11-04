@@ -1,4 +1,4 @@
--- C09 Atypical time between award and contract signature.
+-- C09 Tiempo atípico entre la adjudicación y la firma del contrato.
 SELECT c.ocid, c.buyer_id, c.supplier_id, c.year,
        least(1.0, (date_diff('day', CAST(c.award_date AS DATE), CAST(c.date_signed AS DATE)) - $max_days)
                   / (2.0 * $max_days)) AS severity,

@@ -46,8 +46,8 @@ class Pipeline:
                 self.meta.update(source=src, files=[str(p) for p in paths])
                 return paths
             except DownloadError as exc:
-                log.warning("Source %s unavailable: %s", src, exc)
-        raise RuntimeError("No data source available")
+                log.warning("La fuente %s no está disponible: %s", src, exc)
+        raise RuntimeError("Ninguna fuente de datos está disponible")
 
     def connect(self) -> duckdb.DuckDBPyConnection:
         wh = self.cfg.path("warehouse")
@@ -62,7 +62,7 @@ class Pipeline:
     def run(self, steps: list[str] | None = None) -> dict:
         steps = steps or ["acquire", "ingest", "quality", "signals", "validate", "report"]
         for item in self.cfg.to_verify():
-            log.warning("threshold to verify: %s", item)
+            log.warning("umbral por verificar: %s", item)
         paths: list[Path] = []
         pseudo = self.pseudonymiser()
         if "acquire" in steps:
@@ -84,7 +84,7 @@ class Pipeline:
             for step in ("signals", "validate", "report"):
                 if step in steps:
                     if importlib.util.find_spec(f"procontrol.{_MODULES[step]}") is None:
-                        log.info("step %s not available yet - skipped", step)
+                        log.info("el paso %s aún no existe; se omite", step)
                         continue
                     mod = importlib.import_module(f"procontrol.{_MODULES[step]}")
                     self.meta[step] = mod.run(self.cfg, con, self.meta)

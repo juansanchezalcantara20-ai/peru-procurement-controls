@@ -1,4 +1,4 @@
--- C02 Single bidder in a competitive procedure (Cardinal R018).
+-- C02 Un solo postor en un procedimiento competitivo (Cardinal R018).
 SELECT p.ocid, p.buyer_id, a.supplier_id, p.year,
        1.0 AS severity,
        p.method_details AS scope_key,

@@ -96,7 +96,7 @@ def benford_metrics(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
                     WHEN scope_id IN (SELECT buyer_id FROM inj) THEN 'injected entity'
                     ELSE 'other entities' END AS scope,
                count(*) AS scopes_tested,
-               count(*) FILTER (WHERE conformity = 'nonconformity') AS nigrini_nonconformity,
+               count(*) FILTER (WHERE conformity = 'no conformidad') AS nigrini_nonconformity,
                count(*) FILTER (WHERE flag) AS flagged_beyond_noise,
                round(avg(mad), 4) AS mean_mad, round(avg(mad_null), 4) AS mean_mad_null
         FROM aggregate_tests WHERE control_id = 'C08'
@@ -378,7 +378,7 @@ without the reveal, and the worksheet stays internal because it is alert-level.
         j = j[(j.verdict != "") & (j.blind.astype(bool))]
         not_blind = ", ".join(show.loc[~show.blind.astype(bool), "case"])
         j["truth_positive"] = j.truly_positive.astype(bool)
-        j["said_positive"] = j.verdict.eq("worth review")
+        j["said_positive"] = j.verdict.eq("merece revisión")
         agree = int((j.truth_positive == j.said_positive).sum())
         fp_caught = int(((~j.truth_positive) & (~j.said_positive)).sum())
         fp_total = int((~j.truth_positive).sum())

@@ -5,9 +5,9 @@
     official or person is ranked or named; public entities appear only in aggregated views.
 
 
-**Formula:** `score = 100 * (1 - PROD_c (1 - weight_c * severity_c))  over the process's alerts`
+**Formula:** `puntaje = 100 × (1 − Π_c (1 − peso_c × severidad_c)), sobre las alertas del proceso`
 
-Each alert is treated as independent evidence that a process deserves a review. The noisy-OR keeps the score between 0 and 100, makes it grow with every additional signal, and saturates instead of adding up linearly, so ten weak signals do not outrank two strong ones. The weight of a control is its specificity: how likely an alert from that control alone is to be worth a reviewer's time, given its expected false-positive profile. The severity (0-1, computed by each rule) is how far past its threshold the case is. Aggregate tests (Benford) never enter the score, because they say nothing about an individual process.
+Cada alerta se trata como una evidencia independiente de que un proceso merece revisión. La combinación «noisy-OR» mantiene el puntaje entre 0 y 100, lo hace crecer con cada señal adicional y se satura en lugar de sumar en línea recta: diez señales débiles no superan a dos fuertes. El peso de un control es su especificidad: qué tan probable es que una alerta de ese control, sola, valga el tiempo de un revisor, dado su perfil esperado de falsas alarmas. La severidad (0 a 1, calculada por cada regla) mide cuánto se pasó el caso de su umbral. Las pruebas agregadas (Benford) nunca entran al puntaje porque no dicen nada de un proceso individual.
 
 Each rule computes the severity (0-1) as the distance past its threshold. For example, an
 amendment at +100% against a 25% cap has severity (1.00 - 0.25) / 0.75 = 1. Only the
@@ -17,21 +17,21 @@ strongest alert of each control counts for a process.
 
 | control | name | weight | rationale |
 |---|---|---|---|
-| C01 | Split purchases below the minor-purchase limit | 0.55 | Strong pattern when it fires, but recurring legitimate purchases are common. |
-| C02 | Single bidder in a competitive procedure | 0.35 | Very common and often structural; weak evidence on its own, valuable in combination. |
-| C03 | Abnormally short submission period | 0.5 | Specific and actionable when the period is checked against the right minimum. |
-| C04 | Supplier concentration by entity and category (HHI) | 0.3 | A structural indicator for the cell, not proof about the individual process. |
-| C05 | Same winner repeated at the same entity | 0.45 | Uses bid behaviour, not just outcomes; reasonably specific. |
-| C06 | Contract amendments raising the amount above the cap | 0.6 | Direct financial impact and a clear legal reference once the cap is verified. |
-| C07 | Unit price atypical against the category median | 0.5 | Price is where the money is; heterogeneity of classes limits specificity. |
-| C08 | Benford's law on awarded amounts (aggregate test) | 0.0 | Aggregate test: excluded from the per-process score by design. |
-| C09 | Atypical time between award and contract signature | 0.4 | Clear and cheap to review, but appeals are a frequent legitimate cause. |
+| C01 | Compras partidas para no hacer concurso | 0.55 | Patrón fuerte cuando aparece, pero las compras recurrentes legítimas son comunes. |
+| C02 | Un solo postor en un concurso abierto | 0.35 | Muy frecuente y muchas veces estructural; evidencia débil sola, valiosa combinada. |
+| C03 | Plazo demasiado corto para presentar ofertas | 0.5 | Específica y accionable cuando el plazo se compara con el mínimo correcto. |
+| C04 | Un proveedor concentra las compras de una entidad | 0.3 | Indicador estructural de la celda, no prueba sobre el proceso individual. |
+| C05 | El mismo ganador una y otra vez en la misma entidad | 0.45 | Usa el comportamiento de las ofertas, no solo los resultados; razonablemente específica. |
+| C06 | Contratos que crecen demasiado después de firmados | 0.6 | Impacto económico directo y referencia legal clara una vez verificado el tope. |
+| C07 | Precios muy por encima de lo que pagan otros | 0.5 | El precio es donde está el dinero; la mezcla dentro de las clases limita la especificidad. |
+| C08 | Montos que no parecen naturales (ley de Benford) | 0.0 | Prueba agregada: excluida del puntaje por proceso por diseño. |
+| C09 | Demora inusual entre la adjudicación y la firma del contrato | 0.4 | Clara y barata de revisar, pero las apelaciones son una causa legítima frecuente. |
 
 ## Review priority
 
-* **P1**: >= 50  - review within the cycle
-* **P2**: 25-50 - sample for review
-* **P3**: < 25  - monitor only
+* **P1**: >= 50  - revisar dentro del ciclo
+* **P2**: 25-50 - revisar por muestreo
+* **P3**: < 25  - solo monitorear
 
 ![Risk score distribution](assets/charts/risk_score.png)
 

@@ -1,301 +1,454 @@
-# Control catalog - the single source of truth for every signal.
+# Catálogo de controles: la única fuente de verdad de cada señal.
 #
-# The engine (src/procontrol/engine.py) reads this file, resolves the parameters (literal values
-# or references into config/thresholds.yaml), runs the SQL file named in `sql` against the clean
-# analytical layer (f_* views) and writes the alerts. No rule is written twice: the SQL file is
-# the exact rule, this file is its documentation and configuration, and the site, the tests and
-# the Power BI model all read from here.
+# El motor (src/procontrol/engine.py) lee este archivo, resuelve los parámetros (valores literales
+# o referencias a config/thresholds.yaml), ejecuta el archivo SQL indicado en `sql` sobre la capa
+# analítica limpia y escribe las alertas. Ninguna regla se escribe dos veces: el SQL es la regla
+# exacta; este archivo es su documentación y su configuración. El sitio, las pruebas y el modelo
+# de Power BI leen de aquí.
 #
-# Signals, never accusations: an alert means "this deserves a review", not "there is an
-# irregularity".
+# Señales, nunca acusaciones: una alerta significa «merece revisión», no «hay una irregularidad».
 #
-# Methodological reference: Open Contracting Partnership, "Red Flags for Integrity: Giving the
-# green light to open data solutions" (2016), and the OCP Cardinal library of red-flag indicators
-# (https://cardinal.readthedocs.io). Cardinal codes are cited only where the rule matches the
-# indicator definition; other controls follow the concept of the guide but are this project's own
-# operationalisation.
+# Referencia metodológica: Open Contracting Partnership, «Red Flags for Integrity: Giving the green
+# light to open data solutions» (2016), y la biblioteca de indicadores Cardinal de OCP
+# (https://cardinal.readthedocs.io). Los códigos de Cardinal se citan solo donde la regla coincide
+# con la definición del indicador; los demás controles siguen el concepto de la guía pero son una
+# operacionalización propia de este proyecto.
 #
-# Fields
-#   level                  process (one alert per contracting process) | aggregate (population test)
-#   parameters             value: literal | ref: dotted path in thresholds.yaml
-#   weight                 contribution to the composite risk score (0-1), see risk_score below
-#   expected_false_positives  qualitative causes + an a-priori rate band, measured in Phase 4
+# Campos (las claves quedan en inglés porque el código las usa; los valores están en español)
+#   name, short_title       nombre del control en palabras (título largo y título corto del menú)
+#   plain_*                 textos en lenguaje simple para el sitio (qué busca, por qué importa,
+#                           ejemplo, qué revisar, cuándo es normal, qué hacer)
+#   level                   process (una alerta por proceso) | aggregate (prueba sobre el conjunto)
+#   parameters              value: literal | ref: ruta en thresholds.yaml
+#   weight                  peso en el puntaje de riesgo (0 a 1), ver risk_score
+#   expected_false_positives  causas legítimas y banda esperada de falsas alarmas, medida en la Fase 4
 
-version: 1
-owner_of_catalog: "Internal Control / Continuous Auditing lead"
-review_cycle: "Quarterly, and after any change in procurement law or thresholds"
+version: 2
+owner_of_catalog: "Jefatura de Control Interno / Auditoría continua"
+review_cycle: "Trimestral, y después de cualquier cambio en la ley de contrataciones o en los umbrales"
 
 risk_score:
   method: noisy_or
-  formula: "score = 100 * (1 - PROD_c (1 - weight_c * severity_c))  over the process's alerts"
+  formula: "puntaje = 100 × (1 − Π_c (1 − peso_c × severidad_c)), sobre las alertas del proceso"
   rationale: >-
-    Each alert is treated as independent evidence that a process deserves a review. The noisy-OR
-    keeps the score between 0 and 100, makes it grow with every additional signal, and saturates
-    instead of adding up linearly, so ten weak signals do not outrank two strong ones. The weight
-    of a control is its specificity: how likely an alert from that control alone is to be worth a
-    reviewer's time, given its expected false-positive profile. The severity (0-1, computed by
-    each rule) is how far past its threshold the case is. Aggregate tests (Benford) never enter
-    the score, because they say nothing about an individual process.
+    Cada alerta se trata como una evidencia independiente de que un proceso merece revisión. La
+    combinación «noisy-OR» mantiene el puntaje entre 0 y 100, lo hace crecer con cada señal
+    adicional y se satura en lugar de sumar en línea recta: diez señales débiles no superan a dos
+    fuertes. El peso de un control es su especificidad: qué tan probable es que una alerta de ese
+    control, sola, valga el tiempo de un revisor, dado su perfil esperado de falsas alarmas. La
+    severidad (0 a 1, calculada por cada regla) mide cuánto se pasó el caso de su umbral. Las
+    pruebas agregadas (Benford) nunca entran al puntaje porque no dicen nada de un proceso individual.
   review_priority:
-    P1: ">= 50  - review within the cycle"
-    P2: "25-50 - sample for review"
-    P3: "< 25  - monitor only"
+    P1: ">= 50  - revisar dentro del ciclo"
+    P2: "25-50 - revisar por muestreo"
+    P3: "< 25  - solo monitorear"
 
 controls:
   - id: C01
-    name: Split purchases below the minor-purchase limit
-    ocp_reference: "OCP Red Flags for Integrity (2016) - tender stage: contract splitting to avoid competitive procedures"
+    name: Compras partidas para no hacer concurso
+    short_title: Compras partidas
+    plain_what: >-
+      Varias compras pequeñas a un mismo proveedor, hechas por la misma entidad en pocos días,
+      cada una justo por debajo del monto a partir del cual la ley exige un concurso.
+    plain_why: >-
+      Partir una compra grande en pedazos permite saltarse la competencia y los controles de un
+      procedimiento más exigente. El precio y la elección del proveedor quedan sin contraste.
+    plain_example: >-
+      La Municipalidad de Villa Ejemplo (entidad inventada) compró a Transportes Ficticios S.A.C.
+      (proveedor inventado) cinco servicios de transporte en 20 días, cada uno por unos S/ 39,000,
+      apenas bajo el límite de S/ 41,200 de ese año. Juntos suman S/ 192,000, casi cinco veces el
+      límite: esa compra debió ir a un procedimiento competitivo.
+    plain_example_line: "Cinco compras de S/ 39,000 al mismo proveedor en 20 días, con un límite de S/ 41,200."
+    plain_check:
+      - "¿La necesidad era previsible desde el inicio (un mismo requerimiento) o surgió en momentos distintos?"
+      - "¿Quién firmó cada orden y si fue la misma persona?"
+      - "¿Hubo cotizaciones de otros proveedores en cada compra?"
+    plain_action: "Pedir los requerimientos originales y ver si eran una sola necesidad."
+    ocp_reference: "OCP Red Flags for Integrity (2016), etapa de convocatoria: fraccionamiento de contratos para evitar procedimientos competitivos"
     control_objective: >-
-      Purchases that by aggregate value should go through a competitive procedure are not
-      fragmented into several minor purchases.
+      Que las compras que por su valor total deberían ir a un procedimiento competitivo no se
+      fragmenten en varias compras menores.
     risk_mitigated: >-
-      Avoidance of competition and of the controls of a more demanding procedure by splitting a
-      requirement into purchases just under the 8 UIT limit.
+      Evitar la competencia y los controles de un procedimiento más exigente partiendo un
+      requerimiento en compras justo debajo del límite de 8 UIT.
     rule: >-
-      For the same buyer, the same supplier and the same UNSPSC segment, flag every minor
-      (non-competitive) purchase with an amount between near_limit_ratio x limit and the limit,
-      when at least min_purchases such purchases fall within window_days of the first one and
-      their sum exceeds the limit of the year. The limit is minor_purchase_limit_uit x the UIT
-      of the purchase year.
+      Para un mismo comprador, proveedor y segmento UNSPSC, marcar cada compra menor (no
+      competitiva) cuyo monto esté entre near_limit_ratio × límite y el límite, cuando al menos
+      min_purchases compras así caen dentro de window_days desde la primera y su suma supera el
+      límite del año. El límite es minor_purchase_limit_uit × la UIT del año de la compra.
     parameters:
       limit_uit: { ref: minor_purchase_limit_uit.value, unit: UIT }
-      near_limit_ratio: { value: 0.80, unit: ratio, note: "internal policy: 'just below' = top 20% of the band" }
-      window_days: { value: 30, unit: days, note: "internal policy: one monthly purchasing cycle" }
-      min_purchases: { value: 3, unit: count }
-      minor_methods: { value: [direct], note: "OCDS procurementMethod values treated as minor/direct purchases" }
-    threshold: "3+ purchases at 80-100% of 8 UIT, same buyer-supplier-segment, within 30 days, sum > 8 UIT"
-    frequency: monthly
-    owner_role: "Procurement controller (Logistics/Abastecimiento) with Internal Control"
-    evidence: "Cluster id, member OCIDs, dates, amounts, cluster total vs. limit, UNSPSC segment"
+      near_limit_ratio: { value: 0.80, unit: proporción, note: "política interna: «justo debajo» = el 20% superior de la banda" }
+      window_days: { value: 30, unit: días, note: "política interna: un ciclo mensual de compras" }
+      min_purchases: { value: 3, unit: cantidad }
+      minor_methods: { value: [direct], note: "valores de procurementMethod de OCDS tratados como compras menores o directas" }
+    threshold: "3 o más compras entre 80% y 100% de 8 UIT, mismo comprador, proveedor y segmento, en 30 días, con suma mayor a 8 UIT"
+    frequency: mensual
+    owner_role: "Responsable de Logística/Abastecimiento, con Control Interno"
+    evidence: "Grupo de compras, procesos que lo forman, fechas, montos, total del grupo frente al límite, segmento UNSPSC"
     expected_false_positives:
-      rate_band: "medium-high (30-60% of alerts legitimate)"
+      rate_band: "media-alta (entre 30 y 60 de cada 100 alertas resultan normales)"
       causes:
-        - Recurring consumables bought monthly from the incumbent (fuel, food, cleaning supplies)
-        - Genuinely unforeseen needs in the same category
-        - Purchases under a framework agreement published as separate orders
+        - Consumibles recurrentes comprados cada mes al proveedor habitual (combustible, alimentos, limpieza)
+        - Necesidades realmente imprevistas en la misma categoría
+        - Órdenes de un acuerdo marco publicadas como compras separadas
     weight: 0.55
-    weight_rationale: "Strong pattern when it fires, but recurring legitimate purchases are common."
+    weight_rationale: "Patrón fuerte cuando aparece, pero las compras recurrentes legítimas son comunes."
     level: process
     sql: controls/sql/c01_split_purchases.sql
 
   - id: C02
-    name: Single bidder in a competitive procedure
-    ocp_reference: "OCP Cardinal R018 - Single bid received; OCP Red Flags for Integrity (2016)"
-    control_objective: "Competitive procedures attract real competition."
+    name: Un solo postor en un concurso abierto
+    short_title: Un solo postor
+    plain_what: >-
+      Procesos abiertos a la competencia en los que se presentó una sola empresa.
+    plain_why: >-
+      Sin competidores no hay presión sobre el precio. A veces es porque el mercado es pequeño;
+      otras, porque las bases se escribieron a la medida de alguien o el aviso no se difundió.
+    plain_example: >-
+      El Hospital Regional de Ejemplo (entidad inventada) convocó una adjudicación simplificada
+      para comprar papel. Solo se presentó Papelera Ficticia E.I.R.L. (proveedor inventado), pese
+      a que el papel lo venden decenas de empresas. Además, en esa entidad 30 de cada 100 procesos
+      de ese tipo tuvieron un solo postor, frente a 19 de cada 100 en el resto del país.
+    plain_example_line: "Una compra de papel, que venden decenas de empresas, recibió una sola oferta."
+    plain_check:
+      - "¿Es un bien o servicio con pocos vendedores (equipos especializados, zonas alejadas)?"
+      - "¿Las bases pedían requisitos que solo cumple una empresa?"
+      - "¿En esta entidad pasa más seguido que en el resto del país?"
+    plain_action: "Revisar solo si coincide con otra señal o si la entidad tiene más casos que el promedio nacional."
+    ocp_reference: "OCP Cardinal R018 (Single bid received); OCP Red Flags for Integrity (2016)"
+    control_objective: "Que los procedimientos competitivos atraigan competencia real."
     risk_mitigated: >-
-      Restrictive specifications, poor publicity or collusion that leave a single bidder and
-      remove price discipline.
+      Especificaciones restrictivas, poca difusión o colusión que dejan un solo postor y eliminan
+      la disciplina de precios.
     rule: >-
-      Flag every process whose procurementMethod is in competitive_methods and whose number of
-      distinct bidders (from bids, falling back to numberOfTenderers) equals 1.
+      Marcar cada proceso cuyo procurementMethod está en competitive_methods y cuyo número de
+      postores distintos (según las ofertas, o numberOfTenderers si no hay ofertas) es 1.
     parameters:
-      competitive_methods: { value: [open, selective], note: "Cardinal default" }
-    threshold: "bidders = 1"
-    frequency: monthly
-    owner_role: "Procurement controller"
-    evidence: "OCID, method, number of bidders, award amount"
+      competitive_methods: { value: [open, selective], note: "valor por defecto de Cardinal" }
+    threshold: "postores = 1"
+    frequency: mensual
+    owner_role: "Responsable de Logística/Abastecimiento"
+    evidence: "Proceso, método, número de postores, monto adjudicado"
     expected_false_positives:
-      rate_band: "high (50-80% legitimate)"
+      rate_band: "alta (entre 50 y 80 de cada 100 alertas resultan normales)"
       causes:
-        - Thin markets (specialised equipment, remote regions)
-        - Re-launched procedures after a void call
-        - Missing bid data in the publication (counts only the published bidders)
+        - Mercados pequeños (equipos especializados, regiones alejadas)
+        - Procesos convocados de nuevo después de quedar desiertos
+        - Datos de ofertas incompletos en la publicación (solo se cuentan los postores publicados)
     weight: 0.35
-    weight_rationale: "Very common and often structural; weak evidence on its own, valuable in combination."
+    weight_rationale: "Muy frecuente y muchas veces estructural; evidencia débil sola, valiosa combinada."
     level: process
     sql: controls/sql/c02_single_bid.sql
 
   - id: C03
-    name: Abnormally short submission period
-    ocp_reference: "OCP Cardinal R003 - Short submission period; OCP Red Flags for Integrity (2016)"
-    control_objective: "Bidders get enough time to prepare offers."
-    risk_mitigated: "A deadline too short to compete, which favours a bidder who knew in advance."
+    name: Plazo demasiado corto para presentar ofertas
+    short_title: Plazo de ofertas muy corto
+    plain_what: >-
+      Concursos en los que las empresas tuvieron menos días de los normales para preparar su oferta.
+    plain_why: >-
+      Un plazo muy corto deja fuera a quien no sabía del proceso con anticipación y favorece a
+      quien ya estaba preparado.
+    plain_example: >-
+      La Universidad Nacional de Ejemplo (entidad inventada) publicó una licitación para equipos
+      de cómputo un viernes y cerró la recepción de ofertas el lunes: 3 días, cuando el mínimo
+      para ese tipo de proceso es de 22. Ganó Sistemas Ficticios S.A. (proveedor inventado).
+    plain_example_line: "Una licitación de equipos de cómputo con 3 días para ofertar, cuando el mínimo es 22."
+    plain_check:
+      - "¿Se usó un procedimiento de urgencia que permite plazos más cortos?"
+      - "¿Era una segunda convocatoria con plazos reducidos?"
+      - "¿Las fechas publicadas son correctas o hay un error de registro?"
+    plain_action: "Pedir la justificación del plazo y la lista de quienes descargaron las bases."
+    ocp_reference: "OCP Cardinal R003 (Short submission period); OCP Red Flags for Integrity (2016)"
+    control_objective: "Que los postores tengan tiempo suficiente para preparar sus ofertas."
+    risk_mitigated: "Un plazo demasiado corto para competir, que favorece a un postor que sabía de antemano."
     rule: >-
-      For competitive processes with a valid tender period, flag when the whole days between
-      tenderPeriod.startDate and tenderPeriod.endDate are below the minimum for the method
-      (min_submission_days.by_method), or below the default when the method is not listed.
+      Para procesos competitivos con un periodo de ofertas válido, marcar cuando los días enteros
+      entre tenderPeriod.startDate y tenderPeriod.endDate son menos que el mínimo para el método
+      (min_submission_days.by_method), o menos que el mínimo por defecto si el método no figura.
     parameters:
-      default_min_days: { ref: min_submission_days.default.value, unit: days }
-      by_method: { ref: min_submission_days.by_method, note: "loaded as reference table ref_min_submission_days" }
-    threshold: "period < method minimum (calendar days; see thresholds.yaml)"
-    frequency: weekly (during the call)
-    owner_role: "Procurement controller; Selection committee secretary"
-    evidence: "OCID, method, start, end, days, minimum applied"
+      default_min_days: { ref: min_submission_days.default.value, unit: días }
+      by_method: { ref: min_submission_days.by_method, note: "se carga como tabla de referencia ref_min_submission_days" }
+    threshold: "plazo menor al mínimo del método (días calendario; ver thresholds.yaml)"
+    frequency: semanal (durante la convocatoria)
+    owner_role: "Responsable de Logística; secretaría del comité de selección"
+    evidence: "Proceso, método, inicio, fin, días, mínimo aplicado"
     expected_false_positives:
-      rate_band: "medium (20-40% legitimate)"
+      rate_band: "media (entre 20 y 40 de cada 100 alertas resultan normales)"
       causes:
-        - Urgency procedures with legally shorter periods
-        - Second calls (re-launch) published with reduced terms
-        - Date-capture errors in the publication
+        - Procedimientos de urgencia con plazos legalmente más cortos
+        - Segundas convocatorias publicadas con plazos reducidos
+        - Errores al registrar las fechas en la publicación
     weight: 0.50
-    weight_rationale: "Specific and actionable when the period is checked against the right minimum."
+    weight_rationale: "Específica y accionable cuando el plazo se compara con el mínimo correcto."
     level: process
     sql: controls/sql/c03_short_submission_period.sql
 
   - id: C04
-    name: Supplier concentration by entity and category (HHI)
-    ocp_reference: "OCP Red Flags for Integrity (2016) - market concentration / supplier dominance (no Cardinal code mapped)"
-    control_objective: "Spending in each entity and category is not captured by one supplier."
-    risk_mitigated: "Capture of a buyer's category by a supplier, favouritism, lock-in."
+    name: Un proveedor concentra las compras de una entidad
+    short_title: Concentración en un proveedor
+    plain_what: >-
+      Entidades en las que, para un tipo de bien o servicio y en un año, casi todo el dinero se lo
+      lleva un mismo proveedor, y no por un único contrato grande sino por muchos.
+    plain_why: >-
+      Cuando un proveedor domina un rubro, la entidad pierde poder de negociación y aumenta el
+      riesgo de favoritismo o de dependencia.
+    plain_example: >-
+      En 2025, la Municipalidad de Villa Ejemplo (entidad inventada) contrató 33 servicios de
+      transporte; 29 fueron para Transportes Ficticios S.A.C. (proveedor inventado), que se llevó
+      92 de cada 100 soles gastados en ese rubro.
+    plain_example_line: "Un proveedor se llevó 29 de 33 contratos de transporte de una entidad en un año."
+    plain_check:
+      - "¿Hay pocos proveedores en la zona o es un distribuidor exclusivo?"
+      - "¿Los demás postores fueron descalificados? ¿Por qué motivos?"
+      - "¿El proveedor dominante gana también en otras entidades cercanas?"
+    plain_action: "Revisar el rubro completo con el responsable de la categoría, no un contrato aislado."
+    ocp_reference: "OCP Red Flags for Integrity (2016): concentración de mercado o dominio de un proveedor (sin código Cardinal asignado)"
+    control_objective: "Que el gasto de cada entidad y categoría no quede capturado por un proveedor."
+    risk_mitigated: "Captura de un rubro por un proveedor, favoritismo, dependencia."
     rule: >-
-      For each buyer x UNSPSC segment x year with at least min_awards awards with a usable amount,
-      compute HHI = sum over suppliers of (share of awarded amount x 100)^2. When HHI exceeds
-      hhi_threshold and the supplier with the largest share holds at least min_top_awards awards
-      in the cell, flag the processes awarded to that supplier.
+      Para cada comprador × segmento UNSPSC × año con al menos min_awards adjudicaciones con monto
+      utilizable, calcular el índice HHI = suma sobre proveedores de (participación en el monto ×
+      100)². Si el HHI supera hhi_threshold y el proveedor con mayor participación tiene al menos
+      min_top_awards adjudicaciones en la celda, marcar los procesos adjudicados a ese proveedor.
     parameters:
-      hhi_threshold: { ref: hhi_highly_concentrated.value, unit: "HHI points (0-10,000)" }
-      min_awards: { value: 15, unit: count, note: "below this, HHI is high by construction" }
-      min_top_awards: { value: 3, unit: count, note: "dominance must come from repeated awards, not one large contract" }
-    threshold: "HHI > 2,500, >= 15 awards in the cell, top supplier with >= 3 of them"
-    frequency: quarterly
-    owner_role: "Category manager; Internal Control"
-    evidence: "Cell (buyer-segment-year), HHI, number of awards and suppliers, top-supplier share"
+      hhi_threshold: { ref: hhi_highly_concentrated.value, unit: "puntos HHI (0 a 10,000)" }
+      min_awards: { value: 15, unit: cantidad, note: "por debajo de esto el HHI sale alto por construcción" }
+      min_top_awards: { value: 3, unit: cantidad, note: "el dominio debe venir de varias adjudicaciones, no de un contrato grande" }
+    threshold: "HHI mayor a 2,500, con 15 o más adjudicaciones en la celda y 3 o más del proveedor principal"
+    frequency: trimestral
+    owner_role: "Responsable de la categoría de compra; Control Interno"
+    evidence: "Celda (comprador-segmento-año), HHI, número de adjudicaciones y proveedores, participación del principal"
     expected_false_positives:
-      rate_band: "medium-high (30-60% legitimate)"
+      rate_band: "media-alta (entre 30 y 60 de cada 100 alertas resultan normales)"
       causes:
-        - Natural monopolies or exclusive distributors (patented drugs, utilities)
-        - Small cells close to the minimum size
-        - One large contract dominating the amount of a cell
+        - Monopolios naturales o distribuidores exclusivos (medicinas con patente, servicios públicos)
+        - Celdas pequeñas, cerca del mínimo
+        - Pocos proveedores en zonas alejadas
     weight: 0.30
-    weight_rationale: "A structural indicator for the cell, not proof about the individual process."
+    weight_rationale: "Indicador estructural de la celda, no prueba sobre el proceso individual."
     level: process
     sql: controls/sql/c04_supplier_concentration.sql
 
   - id: C05
-    name: Same winner repeated at the same entity
-    ocp_reference: "OCP Red Flags for Integrity (2016) - same supplier repeatedly winning (no Cardinal code mapped)"
-    control_objective: "Competitive procedures at an entity rotate between bidders as market conditions dictate."
-    risk_mitigated: "Bid rigging (rotation or cover bidding), favouritism by the evaluation committee."
+    name: El mismo ganador una y otra vez en la misma entidad
+    short_title: Ganador repetido
+    plain_what: >-
+      Un proveedor que, en una misma entidad y en un mismo año, gana casi todos los concursos a
+      los que se presenta.
+    plain_why: >-
+      Ganar siempre puede ser señal de eficiencia, pero también de acuerdos entre postores (se
+      turnan para ganar) o de un comité de evaluación que favorece a alguien.
+    plain_example: >-
+      En 2024, Sistemas Ficticios S.A. (proveedor inventado) se presentó a 14 concursos de la
+      Universidad Nacional de Ejemplo (entidad inventada) y ganó los 14.
+    plain_example_line: "Un proveedor se presentó a 14 concursos de una entidad en un año y ganó los 14."
+    plain_check:
+      - "¿Quiénes fueron los otros postores y por qué perdieron (precio, descalificación)?"
+      - "¿Los mismos competidores aparecen siempre y pierden siempre?"
+      - "¿Los integrantes del comité de evaluación se repiten?"
+    plain_action: "Comparar las ofertas perdedoras: precios casi iguales o descalificaciones repetidas merecen atención."
+    ocp_reference: "OCP Red Flags for Integrity (2016): el mismo proveedor gana repetidamente (sin código Cardinal asignado)"
+    control_objective: "Que los concursos de una entidad se repartan según las condiciones del mercado."
+    risk_mitigated: "Colusión entre postores (rotación u ofertas de cobertura), favoritismo del comité."
     rule: >-
-      For each buyer x supplier x year, among competitive processes, count wins and the
-      processes the supplier bid on. Flag the won processes when wins >= min_wins and
-      wins / bids >= min_win_rate.
+      Para cada comprador × proveedor × año, entre procesos competitivos, contar victorias y
+      procesos en que el proveedor ofertó. Marcar los procesos ganados cuando victorias ≥ min_wins
+      y victorias / ofertas ≥ min_win_rate.
     parameters:
-      min_wins: { value: 6, unit: count }
-      min_win_rate: { value: 0.60, unit: ratio, note: "lowered from 0.80 after the first synthetic run, see D19" }
-    threshold: ">= 6 competitive wins in a year at one entity with a win rate >= 60%"
-    frequency: quarterly
-    owner_role: "Internal Control; Procurement controller"
-    evidence: "Buyer-supplier-year, wins, bids submitted, win rate, OCIDs won"
+      min_wins: { value: 6, unit: cantidad }
+      min_win_rate: { value: 0.60, unit: proporción, note: "bajó de 0.80 tras la primera corrida simulada, ver D19" }
+    threshold: "6 o más victorias en un año en una entidad, ganando al menos 60 de cada 100 veces"
+    frequency: trimestral
+    owner_role: "Control Interno; Responsable de Logística"
+    evidence: "Comprador-proveedor-año, victorias, ofertas presentadas, tasa de éxito, procesos ganados"
     expected_false_positives:
-      rate_band: "medium (25-50% legitimate)"
+      rate_band: "media (entre 25 y 50 de cada 100 alertas resultan normales)"
       causes:
-        - Efficient incumbent with the lowest prices in a local market
-        - Bid data incomplete (losing bids not published inflate the win rate)
+        - Un proveedor local eficiente con los precios más bajos
+        - Datos de ofertas incompletos (si no se publican las ofertas perdedoras, la tasa de éxito parece mayor)
     weight: 0.45
-    weight_rationale: "Uses bid behaviour, not just outcomes; reasonably specific."
+    weight_rationale: "Usa el comportamiento de las ofertas, no solo los resultados; razonablemente específica."
     level: process
     sql: controls/sql/c05_repeated_winner.sql
 
   - id: C06
-    name: Contract amendments raising the amount above the cap
-    ocp_reference: "OCP Red Flags for Integrity (2016) - implementation stage: contract amendments / cost overruns"
-    control_objective: "Amendments stay within the limits that the original competition justified."
-    risk_mitigated: "A low winning bid recovered later through amendments, or scope added without a new procedure."
+    name: Contratos que crecen demasiado después de firmados
+    short_title: Contratos que crecen
+    plain_what: >-
+      Contratos cuyo monto subió con modificaciones posteriores (adendas) más allá del límite
+      que la ley permite sin un nuevo proceso.
+    plain_why: >-
+      Una forma de ganar un concurso es ofrecer barato y recuperar después con modificaciones.
+      También puede ser trabajo nuevo que debió concursarse aparte.
+    plain_example: >-
+      El Gobierno Regional de Ejemplo (entidad inventada) firmó con Consultora Ficticia S.A.C.
+      (proveedor inventado) un contrato de S/ 234,000. Con dos adendas llegó a S/ 500,000: creció
+      114%, cuando el límite es 25%. Además, en ese concurso hubo un solo postor.
+    plain_example_line: "Un contrato de S/ 234,000 terminó en S/ 500,000 tras dos adendas."
+    plain_check:
+      - "¿Las adendas tienen la resolución de aprobación y el informe técnico que las justifica?"
+      - "¿Son obras adicionales (con reglas distintas) o reajustes de precios por fórmula?"
+      - "¿El monto original estaba muy por debajo de lo que la entidad había estimado?"
+    plain_action: "Pedir las resoluciones de aprobación de cada adenda."
+    ocp_reference: "OCP Red Flags for Integrity (2016), etapa de ejecución: modificaciones contractuales y sobrecostos"
+    control_objective: "Que las modificaciones no superen los límites que justificó la competencia original."
+    risk_mitigated: "Una oferta baja recuperada después con adendas, o trabajo nuevo sin un nuevo procedimiento."
     rule: >-
-      For each contract with amendments that publish an amended total, compute
-      increase = latest amended total / original amount - 1 and flag when it exceeds cap.
+      Para cada contrato con modificaciones que publican un monto total actualizado, calcular
+      aumento = último monto modificado / monto original − 1 y marcar cuando supera cap.
     parameters:
-      cap: { ref: amendment_increase_cap.value, unit: ratio }
-    threshold: "cumulative increase > 25% (to verify under Ley 32069)"
-    frequency: monthly
-    owner_role: "Contract administrator; Internal Control"
-    evidence: "OCID, contract, original amount, amended amount, increase %, number of amendments"
+      cap: { ref: amendment_increase_cap.value, unit: proporción }
+    threshold: "aumento acumulado mayor a 25% (por verificar bajo la Ley 32069)"
+    frequency: mensual
+    owner_role: "Administrador del contrato; Control Interno"
+    evidence: "Proceso, contrato, monto original, monto modificado, % de aumento, número de modificaciones"
     expected_false_positives:
-      rate_band: "medium (20-40% legitimate)"
+      rate_band: "media (entre 20 y 40 de cada 100 alertas resultan normales)"
       causes:
-        - Approved additional works (works contracts follow different caps)
-        - Price-adjustment formulas (reajustes) published as amendments
-        - Amended total published including taxes when the original was not
+        - Adicionales de obra aprobados (las obras tienen límites distintos)
+        - Reajustes de precio por fórmula publicados como modificaciones
+        - Monto modificado publicado con impuestos cuando el original no los incluía
     weight: 0.60
-    weight_rationale: "Direct financial impact and a clear legal reference once the cap is verified."
+    weight_rationale: "Impacto económico directo y referencia legal clara una vez verificado el tope."
     level: process
     sql: controls/sql/c06_amendment_increase.sql
 
   - id: C07
-    name: Unit price atypical against the category median
-    ocp_reference: "OCP Red Flags for Integrity (2016) - award stage: prices far from market / inflated prices"
-    control_objective: "Prices paid are in line with what other entities pay for the same item class."
-    risk_mitigated: "Overpricing, specification inflation, or a unit/quantity error that hides one."
+    name: Precios muy por encima de lo que pagan otros
+    short_title: Precios atípicos
+    plain_what: >-
+      Artículos comprados a un precio unitario tres o más veces mayor que el precio típico que
+      pagan las demás entidades por artículos de la misma clase.
+    plain_why: >-
+      El precio es donde está el dinero. Un sobreprecio grande puede ser sobrecosto, una
+      especificación inflada o un error de unidades que esconde uno de los dos.
+    plain_example: >-
+      El Hospital Regional de Ejemplo (entidad inventada) compró alimentos a Distribuidora
+      Ficticia S.A.C. (proveedor inventado) a S/ 102.60 el kilo, cuando el precio típico de esa
+      clase de alimentos en el país es S/ 16.80: seis veces más.
+    plain_example_line: "Un kilo de alimentos pagado a S/ 102.60 cuando lo típico es S/ 16.80."
+    plain_check:
+      - "¿La unidad de medida es la misma (caja contra unidad, kilo contra tonelada)?"
+      - "¿Es un artículo de mayor calidad dentro de una clase que mezcla productos distintos?"
+      - "¿El costo de llevarlo a una zona alejada explica la diferencia?"
+    plain_action: "Pedir el estudio de mercado que sustentó el valor estimado."
+    ocp_reference: "OCP Red Flags for Integrity (2016), etapa de adjudicación: precios lejos del mercado o inflados"
+    control_objective: "Que los precios pagados estén en línea con lo que pagan otras entidades por la misma clase de artículo."
+    risk_mitigated: "Sobreprecios, especificaciones infladas o errores de unidad o cantidad que los esconden."
     rule: >-
-      For each UNSPSC class with at least min_group priced items, compute the median awarded unit
-      price. Flag items whose unit price is >= ratio times that median.
+      Para cada clase UNSPSC con al menos min_group artículos con precio, calcular la mediana del
+      precio unitario adjudicado. Marcar los artículos cuyo precio unitario es al menos ratio
+      veces esa mediana.
     parameters:
-      ratio: { value: 3.0, unit: "x median" }
-      min_group: { value: 20, unit: count }
-    threshold: "unit price >= 3x the class median (class with >= 20 items)"
-    frequency: monthly
-    owner_role: "Category manager; Cost controller"
-    evidence: "OCID, item class, unit price, class median, ratio, group size"
+      ratio: { value: 3.0, unit: "veces la mediana" }
+      min_group: { value: 20, unit: cantidad }
+    threshold: "precio unitario 3 o más veces la mediana de su clase (clases con 20 o más artículos)"
+    frequency: mensual
+    owner_role: "Responsable de la categoría de compra; control de costos"
+    evidence: "Proceso, clase del artículo, precio unitario, mediana de la clase, cuántas veces la supera, tamaño del grupo"
     expected_false_positives:
-      rate_band: "medium-high (30-60% legitimate)"
+      rate_band: "media-alta (entre 30 y 60 de cada 100 alertas resultan normales)"
       causes:
-        - Heterogeneous classes (a class mixes basic and premium items)
-        - Unit-of-measure differences (box vs. unit)
-        - Small or remote deliveries with higher logistics cost
+        - Clases que mezclan artículos básicos y de alta gama
+        - Diferencias en la unidad de medida (caja contra unidad)
+        - Entregas pequeñas o en zonas alejadas con mayor costo logístico
     weight: 0.50
-    weight_rationale: "Price is where the money is; heterogeneity of classes limits specificity."
+    weight_rationale: "El precio es donde está el dinero; la mezcla dentro de las clases limita la especificidad."
     level: process
     sql: controls/sql/c07_price_outlier.sql
 
   - id: C08
-    name: Benford's law on awarded amounts (aggregate test)
-    ocp_reference: "Analytical procedure (Nigrini 2012); not an OCP red flag on individual processes"
-    control_objective: "The population of awarded amounts of an entity looks like naturally generated amounts."
-    risk_mitigated: "Systematic fabrication or manipulation of amounts in an entity's records."
+    name: Montos que no parecen naturales (ley de Benford)
+    short_title: Montos poco naturales (Benford)
+    plain_what: >-
+      Revisa si, en el conjunto de montos de una entidad, los primeros dígitos aparecen con la
+      frecuencia que se observa en cifras reales: muchos montos empiezan con 1, pocos con 9.
+    plain_why: >-
+      Cuando alguien inventa cifras, tiende a repartir los primeros dígitos de forma pareja. Es una
+      prueba sobre el conjunto: nunca señala un contrato ni una persona.
+    plain_example: >-
+      En una entidad inventada, solo 11 de cada 100 montos empezaban con 1, cuando en cifras
+      naturales lo esperado es unos 30 de cada 100. Esa diferencia es demasiado grande para ser
+      casualidad, dado el número de montos.
+    plain_example_line: "Solo 11 de cada 100 montos empiezan con 1, cuando lo esperado es 30."
+    plain_check:
+      - "¿La entidad compra pocos tipos de artículos a precios fijos (eso también deforma la distribución)?"
+      - "¿Hay muchos montos justo debajo del límite de 8 UIT?"
+      - "Si la desviación persiste, pedir una muestra aleatoria de expedientes y compararlos con lo registrado."
+    plain_action: "Usarla como señal para planificar una auditoría, nunca como hallazgo sobre un contrato."
+    ocp_reference: "Procedimiento analítico (Nigrini 2012); no es una bandera roja de OCP sobre procesos individuales"
+    control_objective: "Que el conjunto de montos adjudicados de una entidad se parezca a montos generados naturalmente."
+    risk_mitigated: "Fabricación o manipulación sistemática de montos en los registros de una entidad."
     rule: >-
-      For all awards and for each buyer with at least min_n awards >= min_amount, compare the
-      first-digit distribution with Benford's law using the Mean Absolute Deviation (MAD) and
-      the chi-square statistic. Report Nigrini's conformity class, and flag the scope only when
-      the MAD is also more than excess_ratio times the MAD expected from sampling noise alone for
-      that n (Nigrini's fixed ranges assume large samples; at n = 300 pure noise already gives
-      MAD ~ 0.014). It is a population test only: it never flags an individual process and
-      never enters the risk score.
+      Para todas las adjudicaciones y para cada comprador con al menos min_n adjudicaciones ≥
+      min_amount, comparar la distribución del primer dígito con la ley de Benford usando la
+      desviación absoluta media (MAD) y el estadístico chi-cuadrado. Se informa la clase de
+      conformidad de Nigrini y se marca el conjunto solo si la MAD también supera excess_ratio veces
+      la MAD esperada por puro azar para ese tamaño (los rangos fijos de Nigrini suponen muestras
+      grandes; con 300 montos el azar solo ya da MAD ~ 0.014). Es una prueba sobre el conjunto:
+      nunca marca un proceso individual y nunca entra al puntaje.
     parameters:
-      min_n: { value: 300, unit: count }
-      min_amount: { value: 10, unit: PEN }
+      min_n: { value: 300, unit: cantidad }
+      min_amount: { value: 10, unit: soles }
       mad_close: { ref: benford_mad_first_digit.close }
       mad_acceptable: { ref: benford_mad_first_digit.acceptable }
       mad_marginal: { ref: benford_mad_first_digit.marginal }
-      excess_ratio: { value: 2.0, unit: "x null MAD", note: "MAD beyond 2x its expected value under exact Benford for the same n (~p99.9 by simulation)" }
-    threshold: "MAD > 0.015 (Nigrini nonconformity) and MAD > 2x the sampling-noise MAD for that n"
-    frequency: annual
-    owner_role: "Internal Audit (analytical review)"
-    evidence: "Scope, n, observed vs. expected digit frequencies, MAD, chi-square, conformity class"
+      excess_ratio: { value: 2.0, unit: "veces la MAD por azar", note: "MAD mayor al doble de lo esperado por azar con el mismo tamaño (~percentil 99.9 por simulación)" }
+    threshold: "MAD mayor a 0.015 (no conformidad de Nigrini) y mayor al doble de la MAD por azar para ese tamaño"
+    frequency: anual
+    owner_role: "Auditoría Interna (revisión analítica)"
+    evidence: "Alcance, número de montos, frecuencias observadas y esperadas por dígito, MAD, chi-cuadrado, clase de conformidad"
     expected_false_positives:
-      rate_band: "high for individual entities (structural reasons are common)"
+      rate_band: "alta para entidades individuales (hay razones estructurales frecuentes)"
       causes:
-        - The 8 UIT minor-purchase limit concentrates amounts in leading digits 3-4
-        - Entities that buy few kinds of items at fixed prices
-        - Small populations
+        - El límite de 8 UIT concentra montos que empiezan con 3 o 4
+        - Entidades que compran pocos tipos de artículos a precios fijos
+        - Conjuntos pequeños
     weight: 0.0
-    weight_rationale: "Aggregate test: excluded from the per-process score by design."
+    weight_rationale: "Prueba agregada: excluida del puntaje por proceso por diseño."
     level: aggregate
     sql: controls/sql/c08_benford.sql
 
   - id: C09
-    name: Atypical time between award and contract signature
-    ocp_reference: "OCP Red Flags for Integrity (2016) - award/contract stage: delays between award and signature"
-    control_objective: "Contracts are signed promptly after award, under the conditions awarded."
-    risk_mitigated: "Renegotiation of awarded conditions before signature, or pressure on the winner."
+    name: Demora inusual entre la adjudicación y la firma del contrato
+    short_title: Demora en la firma
+    plain_what: >-
+      Contratos que se firmaron mucho tiempo después de que se eligió al ganador.
+    plain_why: >-
+      Entre la adjudicación y la firma se pueden renegociar en privado las condiciones que se
+      ganaron en público, o presionar al ganador.
+    plain_example: >-
+      La Universidad Nacional de Ejemplo (entidad inventada) adjudicó un servicio de ingeniería a
+      Ingenieros Ficticios S.A.C. (proveedor inventado) en agosto, pero el contrato se firmó a fines
+      de diciembre: 126 días después, cuando lo habitual son menos de dos semanas.
+    plain_example_line: "Un contrato firmado 126 días después de elegir al ganador."
+    plain_check:
+      - "¿Hubo un recurso de apelación que suspendió el proceso?"
+      - "¿El ganador tardó en presentar garantías o documentos?"
+      - "¿Las condiciones firmadas son las mismas que las de la oferta ganadora?"
+    plain_action: "Revisar si hubo apelación; si no la hubo, comparar el contrato con la oferta."
+    ocp_reference: "OCP Red Flags for Integrity (2016), etapa de adjudicación y contrato: demoras entre la adjudicación y la firma"
+    control_objective: "Que los contratos se firmen pronto después de la adjudicación, en las condiciones adjudicadas."
+    risk_mitigated: "Renegociación de condiciones antes de la firma o presión sobre el ganador."
     rule: >-
-      For contracts with a valid signature date (not before the award) whose procurementMethod
-      is not in excluded_methods, flag when the days between award date and signature exceed
-      max_days.
+      Para contratos con fecha de firma válida (no anterior a la adjudicación) cuyo
+      procurementMethod no está en excluded_methods, marcar cuando los días entre adjudicación y
+      firma superan max_days.
     parameters:
-      max_days: { value: 60, unit: days, note: "internal policy; the legal signing deadline in business days is to_verify" }
-      excluded_methods: { value: [direct], note: "minor/direct purchase orders have no signing step; added after the case review (D25)" }
-    threshold: "> 60 calendar days from award to signature"
-    frequency: monthly
-    owner_role: "Contract administrator"
-    evidence: "OCID, award date, signature date, days"
+      max_days: { value: 60, unit: días, note: "política interna; el plazo legal de firma en días hábiles está por verificar" }
+      excluded_methods: { value: [direct], note: "las órdenes de compras menores o directas no tienen paso de firma; agregado tras la revisión de casos (D25)" }
+    threshold: "más de 60 días calendario entre la adjudicación y la firma"
+    frequency: mensual
+    owner_role: "Administrador del contrato"
+    evidence: "Proceso, fecha de adjudicación, fecha de firma, días"
     expected_false_positives:
-      rate_band: "medium (20-40% legitimate)"
+      rate_band: "media (entre 20 y 40 de cada 100 alertas resultan normales)"
       causes:
-        - Appeals (recursos de apelación) suspending the award
-        - Guarantees or documents pending from the winner
-        - Budget certification delays at year end
+        - Recursos de apelación que suspenden la adjudicación
+        - Garantías o documentos pendientes del ganador
+        - Demoras en la certificación presupuestal a fin de año
     weight: 0.40
-    weight_rationale: "Clear and cheap to review, but appeals are a frequent legitimate cause."
+    weight_rationale: "Clara y barata de revisar, pero las apelaciones son una causa legítima frecuente."
     level: process
     sql: controls/sql/c09_award_signature_delay.sql

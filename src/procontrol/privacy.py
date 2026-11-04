@@ -47,8 +47,8 @@ class Pseudonymiser:
         key = key or os.environ.get(env_var)
         if not key:
             warnings.warn(
-                f"{env_var} is not set: using the public demo key. Set a secret key before "
-                "processing real data.",
+                f"{env_var} no está definida: se usa la clave pública de demostración. Defina una "
+                "clave secreta antes de procesar datos reales.",
                 stacklevel=2,
             )
             key = DEMO_KEY

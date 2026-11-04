@@ -1,4 +1,4 @@
--- C07 Unit price atypical against the median of its UNSPSC class.
+-- C07 Precio unitario atípico frente a la mediana de su clase UNSPSC.
 WITH stats AS (
     SELECT classification_id, median(unit_amount) AS med, count(*) AS n
     FROM f_item GROUP BY 1

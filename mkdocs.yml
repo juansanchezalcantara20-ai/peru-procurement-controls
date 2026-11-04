@@ -3,12 +3,15 @@ site_description: Continuous-control analytics on Peruvian public procurement (O
 repo_url: https://github.com/juansanchezalcantara20-ai/peru-procurement-controls
 theme:
   name: material
+  language: es
   features: [navigation.sections, navigation.top, content.tables]
   palette:
     - scheme: default
       toggle: { icon: material/brightness-7, name: Dark mode }
     - scheme: slate
       toggle: { icon: material/brightness-4, name: Light mode }
+extra:
+  generator: false
 markdown_extensions: [tables, admonition, attr_list, md_in_html, toc]
 nav:
   - Overview: index.md
@@ -27,6 +30,6 @@ nav:
   - Risk score: risk-score.md
   - Trends: trends.md
   - Validation: validation.md
-  - Decisions: DECISIONS.md
+  - Decisiones: metodologia/decisiones.md
 not_in_nav: |
   validation/review_judgments.yaml

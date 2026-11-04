@@ -1,89 +1,90 @@
-# Blind case review: verdicts written from the worksheet context only, BEFORE revealing the
-# synthetic ground truth. Reviewer: project author (with Claude Code), 2026-11-04.
-# verdict: "worth review" | "likely false positive"
+# Revisión de casos a ciegas: veredictos escritos solo con el contexto de la hoja de trabajo,
+# ANTES de revelar la verdad de los datos simulados. Revisor: autor del proyecto (con Claude Code),
+# 2026-11-04. Traducidos al español en la segunda vuelta sin cambiar el juicio.
+# verdict: "merece revisión" | "probable falsa alarma"
 cases:
-  - control_id: C01
-    ocid: ocds-synthpe-012467
-    verdict: worth review
-    reason: "5 transport-service purchases at 89-98% of the limit inside the window (4.7x the limit in total); 5 of the supplier's 6 minor purchases at the entity that year sit in this cluster. Transport is not a fixed monthly consumable."
-  - control_id: C01
-    ocid: ocds-synthpe-012512
-    verdict: worth review
-    reason: "4 IT-equipment purchases at 85-94% of the limit, 3.5x the limit in total; they are all of the supplier's minor purchases at the entity. Equipment is a one-off need, not a recurring one."
-  - control_id: C02
-    ocid: ocds-synthpe-006789
-    verdict: worth review
-    reason: "The single bid alone is unremarkable (entity single-bid rate 16% vs 19% national for the method), but the process also carries concentration, repeated-winner and price-outlier signals."
-  - control_id: C02
-    ocid: ocds-synthpe-007414
-    verdict: likely false positive
-    reason: "Fuel purchase; the entity's single-bid rate (14%) is below the national rate (19%) and there is no other signal. Consistent with a structural thin market."
-  - control_id: C02
-    ocid: ocds-synthpe-007471
-    verdict: worth review
-    reason: "Paper is a commodity with many suppliers, yet the entity's single-bid rate for this method is 30% against 19% nationally (44 processes). Review the entity's specifications and publicity."
-  - control_id: C03
-    ocid: ocds-synthpe-000483
-    verdict: likely false positive
-    reason: "3 days against a 5-day placeholder minimum for a price comparison, a fast-track method. The shortfall is small, the minimum is still to verify (business vs calendar days) and there is no other signal."
-  - control_id: C03
-    ocid: ocds-synthpe-003214
-    verdict: likely false positive
-    reason: "Same situation for a reverse auction: 3 vs 5 days on a placeholder minimum, entity with low single-bid rate (4%), no other signal."
-  - control_id: C04
-    ocid: ocds-synthpe-005812
-    verdict: worth review
-    reason: "Transport cell with HHI 8,456: one supplier holds 29 of 33 awards and 92% of the amount."
-  - control_id: C04
-    ocid: ocds-synthpe-009761
-    verdict: likely false positive
-    reason: "HHI 3,063 with 23 suppliers; the top supplier reaches 52% of the amount with only 3 awards, so one or two large consulting contracts drive the index. This is the known 'one large contract' cause."
-  - control_id: C05
-    ocid: ocds-synthpe-003387
-    verdict: worth review
-    reason: "10 public tenders won out of 10 bid at the same entity in one year."
-  - control_id: C05
-    ocid: ocds-synthpe-004155
-    verdict: worth review
-    reason: "22 of 22 reverse auctions won at one entity, together with concentration and a single-bid signal."
-  - control_id: C05
-    ocid: ocds-synthpe-005763
-    verdict: worth review
-    reason: "14 of 14 public competitions won, together with concentration and a single bid."
-  - control_id: C05
-    ocid: ocds-synthpe-006088
-    verdict: worth review
-    reason: "12 wins out of 14 bids in reverse auctions; no other signal, so it could be an efficient incumbent, but the win count is high enough to check the losing bids."
-  - control_id: C06
-    ocid: ocds-synthpe-005132
-    verdict: worth review
-    reason: "Amended total +114% over two amendments, on a process that also had a single bidder."
-  - control_id: C06
-    ocid: ocds-synthpe-011934
-    verdict: likely false positive
-    reason: "One amendment of +36% on a food-supply contract, 11 points over a cap that is itself still to verify, low score and no other signal. Consistent with an approved quantity addition; check the approval resolution."
-  - control_id: C06
-    ocid: ocds-synthpe-012141
-    verdict: worth review
-    reason: "+57% over two amendments on a contract that also had a short submission period."
-  - control_id: C07
-    ocid: ocds-synthpe-005439
-    verdict: worth review
-    reason: "Unit price 4.9x the class median (325 items). The entity pays 28% above class medians across all its items, which points to an entity-level pricing or data issue worth one review."
-  - control_id: C07
-    ocid: ocds-synthpe-011923
-    verdict: worth review
-    reason: "Unit price 6.1x the median of the same class, at the same entity with prices above medians overall."
-  - control_id: C09
-    ocid: ocds-synthpe-001155
-    verdict: worth review
-    reason: "126 days from award to signature for engineering services. An appeal would explain it, but no appeal data is published, so the check is cheap and needed."
-  - control_id: C09
-    ocid: ocds-synthpe-010320
-    verdict: likely false positive
-    reason: "A minor purchase: the 'contract' is a purchase order whose date semantics differ, and the amount is below 8 UIT. Low materiality; better excluded from C09 by design."
-  - control_id: C09
-    ocid: ocds-synthpe-007252
-    blind: false   # redrawn after the C09 change; its ground truth was displayed before judging
-    verdict: worth review
-    reason: "131 days from award to signature in a reverse auction for paper, a simple commodity contract where appeals are rare. Same reasoning as the other C09 case: cheap to check the appeal record."
+- control_id: C01
+  ocid: ocds-synthpe-012467
+  verdict: merece revisión
+  reason: 5 compras de transporte entre 89% y 98% del límite dentro de la ventana (4.7 veces el límite en total); 5 de las 6 compras menores del proveedor en la entidad ese año están en este grupo. El transporte no es un consumible mensual fijo.
+- control_id: C01
+  ocid: ocds-synthpe-012512
+  verdict: merece revisión
+  reason: 4 compras de equipos informáticos entre 85% y 94% del límite, 3.5 veces el límite en total; son todas las compras menores del proveedor en la entidad. Un equipo es una necesidad puntual, no recurrente.
+- control_id: C02
+  ocid: ocds-synthpe-006789
+  verdict: merece revisión
+  reason: El postor único por sí solo no llama la atención (la entidad tiene 16 de cada 100 procesos de ese método con postor único, frente a 19 en el país), pero el proceso también tiene señales de concentración, ganador repetido y precio atípico.
+- control_id: C02
+  ocid: ocds-synthpe-007414
+  verdict: probable falsa alarma
+  reason: Compra de combustible; la tasa de postor único de la entidad (14 de cada 100) está por debajo de la nacional (19) y no hay otra señal. Calza con un mercado pequeño estructural.
+- control_id: C02
+  ocid: ocds-synthpe-007471
+  verdict: merece revisión
+  reason: El papel lo venden muchas empresas, y aun así la entidad tiene 30 de cada 100 procesos de este método con postor único, frente a 19 en el país (44 procesos). Revisar las bases y la difusión de la entidad.
+- control_id: C03
+  ocid: ocds-synthpe-000483
+  verdict: probable falsa alarma
+  reason: 3 días frente a un mínimo provisional de 5 en una comparación de precios, que es un método rápido. El faltante es pequeño, el mínimo aún está por verificar (días hábiles o calendario) y no hay otra señal.
+- control_id: C03
+  ocid: ocds-synthpe-003214
+  verdict: probable falsa alarma
+  reason: 'Mismo caso en una subasta inversa: 3 días frente a un mínimo provisional de 5, entidad con baja tasa de postor único (4 de cada 100), sin otra señal.'
+- control_id: C04
+  ocid: ocds-synthpe-005812
+  verdict: merece revisión
+  reason: 'Rubro de transporte con HHI de 8,456: un proveedor tiene 29 de 33 adjudicaciones y 92 de cada 100 soles.'
+- control_id: C04
+  ocid: ocds-synthpe-009761
+  verdict: probable falsa alarma
+  reason: HHI de 3,063 con 23 proveedores; el principal llega a 52 de cada 100 soles con solo 3 adjudicaciones, así que uno o dos contratos grandes de consultoría mueven el índice. Es la causa conocida de «un contrato grande».
+- control_id: C05
+  ocid: ocds-synthpe-003387
+  verdict: merece revisión
+  reason: 10 licitaciones ganadas de 10 en las que ofertó, en la misma entidad y el mismo año.
+- control_id: C05
+  ocid: ocds-synthpe-004155
+  verdict: merece revisión
+  reason: 22 de 22 subastas inversas ganadas en una entidad, junto con concentración y postor único.
+- control_id: C05
+  ocid: ocds-synthpe-005763
+  verdict: merece revisión
+  reason: 14 de 14 concursos públicos ganados, junto con concentración y postor único.
+- control_id: C05
+  ocid: ocds-synthpe-006088
+  verdict: merece revisión
+  reason: 12 victorias en 14 ofertas en subastas inversas; sin otra señal puede ser un proveedor eficiente, pero la cantidad de victorias justifica mirar las ofertas perdedoras.
+- control_id: C06
+  ocid: ocds-synthpe-005132
+  verdict: merece revisión
+  reason: El monto modificado subió 114% en dos adendas, en un proceso que además tuvo un solo postor.
+- control_id: C06
+  ocid: ocds-synthpe-011934
+  verdict: probable falsa alarma
+  reason: Una adenda de +36% en un contrato de alimentos, 11 puntos sobre un tope que también está por verificar, puntaje bajo y sin otra señal. Calza con una ampliación de cantidades aprobada; verificar la resolución.
+- control_id: C06
+  ocid: ocds-synthpe-012141
+  verdict: merece revisión
+  reason: +57% en dos adendas en un contrato que además tuvo un plazo de ofertas corto.
+- control_id: C07
+  ocid: ocds-synthpe-005439
+  verdict: merece revisión
+  reason: Precio unitario 4.9 veces la mediana de la clase (325 artículos). La entidad paga 28% más que la mediana en todos sus artículos, lo que apunta a un problema de precios o de datos de toda la entidad que merece una revisión.
+- control_id: C07
+  ocid: ocds-synthpe-011923
+  verdict: merece revisión
+  reason: Precio unitario 6.1 veces la mediana de la misma clase, en la misma entidad con precios sobre la mediana en general.
+- control_id: C09
+  ocid: ocds-synthpe-001155
+  verdict: merece revisión
+  reason: 126 días entre la adjudicación y la firma de un servicio de ingeniería. Una apelación lo explicaría, pero no se publican datos de apelaciones, así que la revisión es barata y necesaria.
+- control_id: C09
+  ocid: ocds-synthpe-010320
+  verdict: probable falsa alarma
+  reason: 'Una compra menor: el «contrato» es una orden de compra con fechas que significan otra cosa, y el monto es menor a 8 UIT. Poca materialidad; mejor excluirla de C09 por diseño.'
+- control_id: C09
+  ocid: ocds-synthpe-007252
+  blind: false
+  verdict: merece revisión
+  reason: '131 días entre la adjudicación y la firma en una subasta inversa de papel, un contrato simple donde las apelaciones son raras. Mismo criterio que el otro caso de C09: es barato revisar si hubo apelación.'

@@ -1,168 +1,169 @@
-# Peru procurement controls
+# Controles sobre las compras públicas del Perú
 
-**Continuous-control analytics on Peruvian public procurement (OCDS).** Purchasing data turned
-into *controls*: written rules that detect risk signals, each with its threshold, owner role,
-evidence and expected false-positive rate, the way an internal-control or continuous-auditing
-function works.
+**Analítica de control continuo sobre las compras públicas peruanas.** Convierte los datos de
+compras en *controles*: reglas escritas que detectan señales de riesgo, cada una con su umbral, su
+rol dueño, la evidencia que genera y su tasa esperada de falsas alarmas, igual que trabaja un área
+de control interno o de auditoría continua.
 
-> **Signals, never accusations.** An alert means *"this deserves a review"*, not *"there is an
-> irregularity"*. No supplier, official or person is ranked or named. Public entities appear
-> only in aggregated views. Natural persons are pseudonymised before anything is stored.
+> **Señales, nunca acusaciones.** Una alerta significa *«este caso merece revisión»*, no *«hay una
+> irregularidad»*. No se ordena ni se nombra a ningún proveedor, funcionario ni persona. Las
+> entidades públicas aparecen solo en vistas agregadas. Las personas naturales se reemplazan por
+> un seudónimo antes de guardar cualquier dato.
 
-> **Data actually used: synthetic (Plan C).** The build environment's network policy blocked
-> the OCP Data Registry and the OECE portal. Every result here comes from a seeded synthetic
-> OCDS dataset (2024-2025, 12.5k processes, 40 entities) with injected, known risk patterns. It
-> describes no real entity. Downloaders for the real publications (Plan A: OECE, Plan B: Perú
-> Compras) are included and untested against the live registry.
+> **Datos usados hasta ahora: simulados (Plan C).** El entorno donde se construyó el proyecto no
+> tenía acceso al registro de Open Contracting Partnership ni al portal del OECE. Todos los
+> resultados versionados vienen de un conjunto simulado con estructura OCDS (2024-2025, 12,500
+> procesos, 40 entidades) con patrones de riesgo sembrados a propósito, que no describe a ninguna
+> entidad real. El sitio dice «(datos simulados)» junto a cada cifra hasta que corran los datos
+> reales.
 
-## Executive summary
+## Resumen ejecutivo
 
 | | |
 |---|---|
-| **What** | 15 data-quality checks, 9 controls (8 per process + Benford as an aggregate test), a composite risk score, validation, a site and a Power BI model |
-| **Data quality first** | All 57 injected data defects detected (duplicates, negative/absurd amounts, non-PEN currency, incoherent dates, missing buyer). Critical defects are excluded field by field before any control runs |
-| **Detection** | Recall 95-100% on every injected pattern ([validation](docs/validation.md)) |
-| **Noise, measured** | Share of alerts on neutral background: 5% (price outlier) to 82% (single bid). Each control declared its expected band *before* it was measured |
-| **Triage** | 83% of P1 (top-priority) processes carry a planted pattern, against 11% of P3. Combining signals is where the precision comes from |
-| **Case review** | 20 alerts reviewed blind. 15 of 19 blind verdicts agree with the ground truth. The review changed one control (C09 now excludes minor purchases) |
-| **Honesty** | 8 legal thresholds still `to_verify` and printed on every run; one calibration round documented ([D19](docs/DECISIONS.md)) |
+| **Qué incluye** | 15 revisiones de calidad del dato, 9 controles (8 por proceso y Benford como prueba sobre el conjunto), un puntaje de riesgo compuesto, la validación de los propios controles, un sitio web y un modelo para Power BI |
+| **Primero la calidad del dato** | Se detectaron los 57 defectos de datos sembrados (duplicados, montos negativos o absurdos, moneda distinta al sol, fechas incoherentes, entidad faltante). Los defectos críticos se excluyen campo por campo antes de correr cualquier control |
+| **Detección** | Encuentra entre 95 y 100 de cada 100 casos sembrados en cada señal ([validación](docs/funciona.md)) |
+| **Ruido, medido** | De cada 100 alertas, entre 5 (precios atípicos) y 82 (un solo postor) caen sobre procesos normales. Cada control declaró su banda esperada *antes* de medirla |
+| **Priorización** | 83 de cada 100 procesos de prioridad alta (P1) tienen un patrón sembrado, frente a 11 de cada 100 en prioridad baja (P3). La precisión viene de combinar señales |
+| **Revisión de casos** | 20 alertas revisadas a ciegas. 15 de 19 veredictos ciegos coinciden con la verdad. La revisión cambió un control (la demora en la firma ahora excluye las compras menores) |
+| **Honestidad** | 8 umbrales legales siguen «por verificar» y se imprimen en cada corrida; la única ronda de calibración está documentada ([D19](docs/metodologia/decisiones.md)) |
 
-**Three aggregate patterns worth a look** (on synthetic data, so they illustrate the method, not
-Peru):
+**Tres patrones agregados que vale la pena mirar** (con datos simulados: ilustran el método, no
+describen al Perú):
 
-1. **Benford's fixed thresholds over-flag small entities.** With a few hundred amounts per
-   entity, Nigrini's ranges call 8 of 16 entities "nonconforming". Correcting for sampling
-   noise (the expected MAD for that *n*) leaves exactly one: the planted entity.
-   Without the correction, the test would accuse noise.
-2. **The single-bid flag is common, and therefore weak on its own.** 6% of neutral processes
-   trigger it (18.6% of *Adjudicación simplificada*). It carries the lowest weight and is
-   reviewed only together with other signals or an entity rate above the national rate.
-3. **Concentration and repeated winning travel together.** C04 + C05 is the most frequent pair
-   of co-firing controls (101 processes). Each control alone is noisy, but together they make up
-   most of the P1 queue.
+1. **Los umbrales fijos de Benford acusan al azar.** Con unos cientos de montos por entidad, los
+   rangos de Nigrini califican de «no conformes» a 8 de 16 entidades. Al corregir por el azar del
+   muestreo queda exactamente una: la entidad sembrada.
+2. **El postor único es frecuente, y por eso pesa poco solo.** Salta en 6 de cada 100 procesos
+   normales (en las adjudicaciones simplificadas, 19 de cada 100 tienen un solo postor). Se revisa
+   solo junto con otras señales o si la entidad está por encima del promedio nacional.
+3. **La concentración y el ganador repetido van juntos.** Son el par de señales que más veces
+   salta a la vez (101 procesos). Cada una sola hace ruido; juntas forman la mayor parte de la cola
+   de prioridad alta.
 
-## Run it
+## Cómo correrlo
 
-One command reproduces everything: install, pipeline, lint, tests and site.
+Un solo comando reproduce todo: instalación, proceso, revisiones de código, pruebas y sitio.
 
 ```bash
 make all
 ```
 
-Step by step:
+Paso a paso:
 
 ```bash
 python -m pip install -e ".[dev]"
 ```
 
 ```bash
-python -m procontrol run                    # synthetic data (default, offline, seeded)
+python -m procontrol run                    # datos simulados (por defecto, sin internet, con semilla fija)
 ```
 
 ```bash
-python -m procontrol run --source oece      # Plan A, after setting the publication id in config/settings.yaml
+python -m procontrol run --source oece      # datos reales del OECE (publicación 135 del registro)
 ```
 
 ```bash
-python -m procontrol to-verify              # thresholds still marked to_verify
+python -m procontrol to-verify              # umbrales que siguen por verificar
 ```
 
 ```bash
 python -m pytest && python -m ruff check src tests && python -m mkdocs serve
 ```
 
-Set `PROCONTROL_SALT` to a secret before processing real data. It keys the hash that
-pseudonymises natural persons.
+Defina `PROCONTROL_SALT` con un valor secreto antes de procesar datos reales: es la clave del hash
+que seudonimiza a las personas naturales.
 
-## How it works
+## Cómo funciona
 
 ```
-acquire ─► ingest ─► quality ─► signals ─► validate ─► report
- (Plan A/B/C)  OCDS→DuckDB  15 checks,   catalog-driven   injected       MkDocs site,
-               natural       clean f_*    engine, noisy-OR patterns +     Power BI export
-               persons       views        risk score       blind review
-               hashed
+obtener ─► ingresar ─► calidad ─► señales ─► validar ─► informe
+ (A/B/C)   OCDS→DuckDB  15 revisiones,  motor desde   casos sembrados  sitio MkDocs,
+           personas      vistas          el catálogo,  + revisión a     exportación
+           naturales     limpias         puntaje       ciegas           para Power BI
+           seudonimizadas
 ```
 
-| Path | Content |
+| Ruta | Contenido |
 |---|---|
-| `config/thresholds.yaml` | Every legal or methodological threshold with its source, check date and status |
-| `controls/catalog.yaml` | **The control catalog**: objective, risk, rule, threshold, frequency, owner role, evidence, expected false positives, weight |
-| `controls/sql/` | The exact rule of each control, executed by the engine with parameters bound from the catalog |
+| `config/thresholds.yaml` | Cada umbral legal o metodológico con su fuente, fecha de revisión y estado |
+| `controls/catalog.yaml` | **El catálogo de controles**: objetivo, riesgo, regla, umbral, frecuencia, rol dueño, evidencia, falsas alarmas esperadas, peso y textos en lenguaje simple |
+| `controls/sql/` | La regla exacta de cada control; el motor la ejecuta con los parámetros del catálogo |
 | `src/procontrol/` | `synthetic`, `download`, `ingest`, `privacy`, `quality`, `engine`, `validation`, `report`, `powerbi` |
-| `docs/` | Site source (pages generated by the pipeline), [`DECISIONS.md`](docs/DECISIONS.md), case-review verdicts |
-| `powerbi/` | [`measures.dax`](powerbi/measures.dax) and [`MODEL.md`](powerbi/MODEL.md) (star schema, relationships, pages) |
-| `outputs/` | Aggregated, versioned results only. Alert-level data stays in the local, git-ignored DuckDB |
-| `data/sample/` | 50 pseudonymised releases. Raw data is downloaded or generated, never committed |
-| `tests/` | 60+ tests. Every signal has small cases that must fire and cases that must not |
+| `docs/` | Fuente del sitio (páginas generadas por el proceso), [decisiones](docs/metodologia/decisiones.md), veredictos de la revisión de casos |
+| `powerbi/` | [`measures.dax`](powerbi/measures.dax) y [`MODEL.md`](powerbi/MODEL.md) (esquema en estrella, relaciones, páginas) |
+| `outputs/` | Solo resultados agregados y versionados. Los datos a nivel de alerta se quedan en el DuckDB local, ignorado por git |
+| `data/sample/` | 50 releases seudonimizados. Los datos crudos se descargan o generan, nunca se suben |
+| `tests/` | Más de 60 pruebas. Cada señal tiene casos pequeños que deben dispararla y otros que no |
 
-### The controls
+### Las señales
 
-| ID | Signal | Reference | Weight |
+| Señal | Qué busca | Referencia | Peso |
 |---|---|---|---|
-| C01 | Split purchases just below the 8 UIT minor-purchase limit | OCP red flags (splitting) | 0.55 |
-| C02 | Single bidder in a competitive procedure | OCP Cardinal R018 | 0.35 |
-| C03 | Abnormally short submission period (method minimum) | OCP Cardinal R003 | 0.50 |
-| C04 | Supplier concentration by entity and category (HHI) | OCP red flags (concentration) | 0.30 |
-| C05 | Same winner repeated at the same entity | OCP red flags (repeat winner) | 0.45 |
-| C06 | Amendments raising the amount above the cap | OCP red flags (amendments) | 0.60 |
-| C07 | Unit price atypical against the class median | OCP red flags (pricing) | 0.50 |
-| C08 | Benford's law on awarded amounts, aggregate only | Nigrini (2012) | 0 |
-| C09 | Atypical time from award to contract signature | OCP red flags (award/contract) | 0.40 |
+| Compras partidas (C01) | Varias compras justo bajo el límite de 8 UIT al mismo proveedor en pocos días | OCP, fraccionamiento | 0.55 |
+| Un solo postor (C02) | Concursos abiertos con una sola oferta | OCP Cardinal R018 | 0.35 |
+| Plazo de ofertas muy corto (C03) | Menos días que el mínimo del método para ofertar | OCP Cardinal R003 | 0.50 |
+| Concentración en un proveedor (C04) | Un proveedor se lleva casi todo un rubro de una entidad (índice HHI) | OCP, concentración | 0.30 |
+| Ganador repetido (C05) | El mismo proveedor gana casi todo lo que oferta en una entidad | OCP, ganador repetido | 0.45 |
+| Contratos que crecen (C06) | Adendas que suben el monto sobre el tope | OCP, modificaciones | 0.60 |
+| Precios atípicos (C07) | Precio unitario 3 o más veces el típico de su clase | OCP, precios | 0.50 |
+| Montos poco naturales (C08) | Ley de Benford, solo sobre el conjunto | Nigrini (2012) | 0 |
+| Demora en la firma (C09) | Más de 60 días entre la adjudicación y la firma | OCP, adjudicación | 0.40 |
 
-### Personal data
+### Datos personales
 
-Suppliers whose RUC starts with 10, 15 or 17 (issued to individuals), or whose identifier is a
-DNI, are replaced *at ingestion* by `NP-<HMAC-SHA256(key, document)[:16]>`, with a generic name
-and no document number. A keyed hash cannot be reversed by brute force over the DNI space, and
-it stays deterministic, so aggregation still works. The versioned sample goes through the same
-pseudonymisation, and tests check that no name or document reaches the warehouse or the outputs
-([D10](docs/DECISIONS.md)).
+Los proveedores cuyo RUC empieza con 10, 15 o 17 (emitidos a personas), o cuyo identificador es un
+DNI, se reemplazan *al ingresar los datos* por `NP-<HMAC-SHA256(clave, documento)[:16]>`, con un
+nombre genérico y sin número de documento. Un hash con clave no se puede revertir probando todos los
+DNI posibles, y sigue siendo determinista, así que se puede agregar. La muestra versionada pasa por
+la misma seudonimización, y las pruebas comprueban que ningún nombre ni documento llegue al almacén
+ni a los resultados ([D10](docs/metodologia/decisiones.md)).
 
-## What this demonstrates
+## Qué demuestra este proyecto
 
-| Job requirement | Where it shows |
+| Lo que piden las vacantes | Dónde se ve |
 |---|---|
-| **Internal control / control design** | Every control has objective, risk, rule, threshold, frequency, owner role, evidence and expected false positives (`controls/catalog.yaml`). Legal thresholds are kept apart from internal-policy parameters |
-| **Continuous auditing** | Controls run from a catalog on a schedule-ready pipeline, produce evidence per alert, and roll up into a review queue (P1/P2/P3) with a documented scoring method |
-| **Process audit** | A blind case review with a written protocol, whose findings changed the design of a control. Measured false-positive rates, not just alarm counts |
-| **Procurement analytics** | OCDS end to end (tender, bids, awards, contracts, amendments), Peruvian procurement methods, UIT-indexed limits, HHI, unit-price benchmarking, splitting |
-| **Data quality & governance** | 15 checks before any control; field-level exclusion; a threshold register with sources and verification status; a decision log; personal-data pseudonymisation |
-| **SQL** | Every rule is a DuckDB SQL file: window self-joins for clusters, HHI, robust medians, Benford with a sampling-noise reference |
-| **Python** | A packaged pipeline, a seeded generator with ground truth, a catalog-driven engine, pytest, ruff, CI and reproducible outputs |
-| **Risk data analysis & BI** | A noisy-OR composite score, validation metrics, a generated MkDocs site, and a Power BI star schema with DAX measures |
+| **Control interno y diseño de controles** | Cada control tiene objetivo, riesgo, regla, umbral, frecuencia, rol dueño, evidencia y falsas alarmas esperadas (`controls/catalog.yaml`). Los umbrales legales están separados de los de política interna |
+| **Auditoría continua** | Los controles corren desde un catálogo en un proceso listo para correr de forma programada, generan evidencia por alerta y se resumen en una cola de revisión (P1/P2/P3) con un método de puntaje documentado |
+| **Auditoría de procesos** | Una revisión de casos a ciegas con protocolo escrito, cuyos hallazgos cambiaron el diseño de un control. Tasas de falsas alarmas medidas, no solo conteos de alarmas |
+| **Analítica de compras** | OCDS de punta a punta (convocatoria, ofertas, adjudicaciones, contratos, modificaciones), métodos de contratación peruanos, límites en UIT, HHI, comparación de precios unitarios, fraccionamiento |
+| **Calidad y gobierno de datos** | 15 revisiones antes de cualquier control; exclusión campo por campo; un registro de umbrales con fuentes y estado de verificación; registro de decisiones; seudonimización de datos personales |
+| **SQL** | Cada regla es un archivo SQL de DuckDB: uniones con ventanas para agrupar compras, HHI, medianas robustas, Benford con referencia de azar |
+| **Python** | Un paquete con proceso completo, un generador con semilla y verdad conocida, un motor guiado por catálogo, pytest, ruff, CI y resultados reproducibles |
+| **Análisis de riesgo y BI** | Un puntaje compuesto, métricas de validación, un sitio generado y un esquema en estrella para Power BI con medidas DAX |
 
-## How this was built
+## Cómo se construyó
 
-I built this repository by directing Claude Code (Anthropic's coding agent) in a single
-autonomous session. I set the objectives, the hard rules (public or synthetic data only, signals
-not accusations, pseudonymisation, thresholds with sources, tests for every signal) and the
-phase plan. The agent wrote the code, SQL, tests and documentation within those limits, and
-logged every design decision with its reason in [`docs/DECISIONS.md`](docs/DECISIONS.md).
-The blind case review in Phase 4 was also produced in that session, and the review file says
-so.
+Construí este repositorio dirigiendo a Claude Code (el agente de programación de Anthropic). Yo
+definí los objetivos, las reglas duras (solo datos públicos o simulados, señales y no
+acusaciones, seudonimización, umbrales con fuente, pruebas para cada señal) y el plan por fases. El
+agente escribió el código, el SQL, las pruebas y la documentación dentro de esos límites, y anotó
+cada decisión de diseño con su porqué en el [registro de decisiones](docs/metodologia/decisiones.md).
+La revisión de casos a ciegas de la Fase 4 también se hizo en esa sesión, y el archivo de la
+revisión lo dice.
 
-## Scope & limitations
+## Alcance y limitaciones
 
-* **Synthetic data only.** The real OECE / Perú Compras publications were not reachable from the
-  build environment. Patterns, rates and charts illustrate the method and say nothing about
-  Peru. The generator is simple: amounts are log-normal, suppliers are chosen by weighted
-  affinity, and the minor-purchase amounts are capped at 97% of the limit, which creates a
-  visible pile in the C01 chart.
-* **The synthetic validation is optimistic.** Injected patterns are cleaner than real ones, so
-  recall here is an upper bound. One calibration round was done on the same data ([D19](docs/DECISIONS.md)).
-* **Thresholds to verify.** Only the UIT values (2024-2026) and the 8 UIT minor-purchase limit
-  were checked, in secondary sources. Minimum submission periods (business days), the amendment
-  cap under Ley 32069 and the 2023 UIT are `to_verify`. The registry publication ids are not
-  set.
-* **Real-feed assumptions to check.** Minor purchases may not be in the OCDS feed. If they are
-  not, C01 needs the purchase-order dataset. Amended totals are read from `amendments[].value`
-  or the synthetic `x_amendedValue`, and the real field must be confirmed. Bids may be published
-  only as `tender.tenderers`, without amounts.
-* **No FX conversion, no business-day calendar, no appeal data.** Each of these limits what the
-  controls can conclude.
-* **Not legal advice and not an audit opinion.** A signal is a reason to look, never a finding.
+* **Por ahora, solo datos simulados.** Los patrones, tasas y gráficos ilustran el método y no
+  dicen nada del Perú. El generador es simple: montos con distribución log-normal, proveedores
+  elegidos por afinidad ponderada, y los montos de compras menores topados en 97% del límite, lo
+  que crea un pico visible en el gráfico de compras partidas.
+* **La validación simulada es optimista.** Los casos sembrados son más limpios que los reales, así
+  que la detección medida aquí es un techo. Hubo una ronda de calibración con los mismos datos
+  ([D19](docs/metodologia/decisiones.md)).
+* **Umbrales por verificar.** Solo se comprobaron la UIT 2024-2026 y el límite de compra menor de
+  8 UIT, en fuentes secundarias. Los plazos mínimos de ofertas (días hábiles), el tope de adendas
+  bajo la Ley 32069 y la UIT 2023 están «por verificar».
+* **Supuestos sobre la publicación real que hay que comprobar.** Puede que las compras menores no
+  estén en la publicación OCDS; si no están, la señal de compras partidas necesita el conjunto de
+  órdenes de compra. Los montos modificados se leen de `amendments[].value` (o del campo simulado
+  `x_amendedValue`). Las ofertas pueden venir solo como lista de postores, sin montos.
+* **Sin conversión de moneda, sin calendario de días hábiles y sin datos de apelaciones.** Cada
+  una de estas faltas limita lo que los controles pueden concluir.
+* **No es asesoría legal ni una opinión de auditoría.** Una señal es una razón para mirar, nunca un
+  hallazgo.
 
-## License
+## Licencia
 
-MIT. See [LICENSE](LICENSE).
+MIT. Ver [LICENSE](LICENSE).

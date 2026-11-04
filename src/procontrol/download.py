@@ -33,7 +33,7 @@ def registry_urls(cfg: Config, source: str) -> list[tuple[int, str]]:
             "https://data.open-contracting.org/en/search/ and set it in config/settings.yaml."
         )
     return [
-        (int(y), reg["base_url"].format(publication_id=pub, year=y))
+        (int(y), reg["base_url"].format(publication_id=pub, name=f"{y}.jsonl.gz"))
         for y in cfg.settings["years"]
     ]
 

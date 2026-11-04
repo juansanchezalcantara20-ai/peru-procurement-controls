@@ -44,4 +44,4 @@ Against the injected patterns, the process controls reach a mean recall of **99%
 4. **[Trends](trends.md)** shows how signals move over time, aggregated.
 5. **[Validation](validation.md)** shows how well each control finds planted patterns, and a
    blind review of 20 alerts.
-6. **[Decisions](DECISIONS.md)** gives every design choice and why.
+6. **[Decisions](metodologia/decisiones.md)** gives every design choice and why.

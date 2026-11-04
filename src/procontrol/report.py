@@ -462,7 +462,7 @@ expected false-positive rate, the way an internal-control or continuous-auditing
 4. **[Trends](trends.md)** shows how signals move over time, aggregated.
 5. **[Validation](validation.md)** shows how well each control finds planted patterns, and a
    blind review of 20 alerts.
-6. **[Decisions](DECISIONS.md)** gives every design choice and why.
+6. **[Decisions](metodologia/decisiones.md)** gives every design choice and why.
 """, encoding="utf-8")
 
 

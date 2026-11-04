@@ -1,10 +1,12 @@
--- C03 Abnormally short submission period (Cardinal R003, method-specific minimums).
+-- C03 Plazo de presentación de ofertas demasiado corto (Cardinal R003, mínimos por método).
+-- La unión por método ignora mayúsculas y tildes («Licitación Pública» = «Licitación pública»).
 WITH periods AS (
     SELECT p.ocid, p.buyer_id, p.year, p.method_details, p.tender_start, p.tender_end,
            date_diff('day', CAST(p.tender_start AS DATE), CAST(p.tender_end AS DATE)) AS days,
            coalesce(r.min_days, $default_min_days) AS min_days
     FROM f_process p
-    LEFT JOIN ref_min_submission_days r ON r.method_details = p.method_details
+    LEFT JOIN ref_min_submission_days r
+           ON lower(strip_accents(r.method_details)) = lower(strip_accents(p.method_details))
     WHERE p.is_competitive AND p.tender_start IS NOT NULL AND p.tender_end IS NOT NULL
 )
 SELECT s.ocid, s.buyer_id, a.supplier_id, s.year,

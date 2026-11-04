@@ -1,116 +1,116 @@
 // =============================================================================================
-// Peru procurement controls - DAX measures equivalent to the Python/SQL pipeline.
-// Model: see powerbi/MODEL.md. Load the CSVs from outputs/powerbi/ (created by `make pipeline`).
+// Controles sobre compras públicas del Perú: medidas DAX equivalentes al proceso en Python y SQL.
+// Modelo: ver powerbi/MODEL.md. Cargue los CSV de outputs/powerbi/ (los crea `make pipeline`).
 //
-// Signals, never accusations: an alert means "this deserves a review", not "there is an
-// irregularity". Do not build visuals that rank suppliers, officials or named people; show
-// public entities only in aggregated visuals (by type, segment, method, month).
+// Señales, nunca acusaciones: una alerta significa «merece revisión», no «hay una irregularidad».
+// No arme visuales que ordenen proveedores, funcionarios ni personas con nombre propio. Muestre
+// las entidades públicas solo en visuales agregados (por tipo, segmento, método o mes).
 // =============================================================================================
 
-// ---- Volumes ---------------------------------------------------------------------------------
-Processes = DISTINCTCOUNT ( fact_process[ocid] )
+// ---- Volúmenes -------------------------------------------------------------------------------
+Procesos = DISTINCTCOUNT ( fact_process[ocid] )
 
-Competitive Processes =
-CALCULATE ( [Processes], fact_process[is_competitive] = TRUE () )
+Procesos competitivos =
+CALCULATE ( [Procesos], fact_process[is_competitive] = TRUE () )
 
-Awarded Amount (PEN) = SUM ( fact_process[award_amount] )
+Monto adjudicado (S/) = SUM ( fact_process[award_amount] )
 
-// ---- Alerts ----------------------------------------------------------------------------------
-Alerts = COUNTROWS ( fact_alert )
+// ---- Alertas ---------------------------------------------------------------------------------
+Alertas = COUNTROWS ( fact_alert )
 
-Flagged Processes = DISTINCTCOUNT ( fact_alert[ocid] )
+Procesos con alerta = DISTINCTCOUNT ( fact_alert[ocid] )
 
-% Processes Flagged = DIVIDE ( [Flagged Processes], [Processes] )
+% Procesos con alerta = DIVIDE ( [Procesos con alerta], [Procesos] )
 
-Alerts per 100 Processes = DIVIDE ( [Alerts], [Processes] ) * 100
+Alertas por cada 100 procesos = DIVIDE ( [Alertas], [Procesos] ) * 100
 
-P1 Processes =
+Procesos prioridad P1 =
 CALCULATE ( DISTINCTCOUNT ( fact_risk_score[ocid] ), fact_risk_score[priority] = "P1" )
 
-Mean Risk Score (flagged) = AVERAGE ( fact_risk_score[score] )
+Puntaje promedio (con alerta) = AVERAGE ( fact_risk_score[score] )
 
-// Recomputes the noisy-OR score from the alerts, so a filter on dim_control (e.g. "without C02")
-// shows how the score would look with a subset of controls.
-// score = 100 * (1 - PRODUCT over controls (1 - max(weight * severity)))
-Risk Score (recomputed) =
-VAR PerControl =
+// Recalcula el puntaje «noisy-OR» desde las alertas, para que un filtro sobre dim_control
+// (por ejemplo «sin C02») muestre cómo quedaría el puntaje con un subconjunto de controles.
+// puntaje = 100 × (1 − PRODUCTO por control (1 − máx(peso × severidad)))
+Puntaje recalculado =
+VAR PorControl =
     ADDCOLUMNS (
         SUMMARIZE ( fact_alert, fact_alert[ocid], fact_alert[control_id] ),
-        "@ws", CALCULATE ( MAX ( fact_alert[weighted_severity] ) )
+        "@ps", CALCULATE ( MAX ( fact_alert[weighted_severity] ) )
     )
-VAR PerProcess =
+VAR PorProceso =
     ADDCOLUMNS (
         VALUES ( fact_alert[ocid] ),
-        "@score",
-            100 * ( 1 - PRODUCTX ( FILTER ( PerControl, fact_alert[ocid] = EARLIER ( fact_alert[ocid] ) ), 1 - [@ws] ) )
+        "@puntaje",
+            100 * ( 1 - PRODUCTX ( FILTER ( PorControl, fact_alert[ocid] = EARLIER ( fact_alert[ocid] ) ), 1 - [@ps] ) )
     )
 RETURN
-    AVERAGEX ( PerProcess, [@score] )
+    AVERAGEX ( PorProceso, [@puntaje] )
 
-// ---- Control-specific measures ---------------------------------------------------------------
-// C02 - single-bid rate among competitive processes
-Single-Bid Rate =
+// ---- Medidas por señal -----------------------------------------------------------------------
+// Un solo postor: proporción de procesos competitivos con un solo postor
+Tasa de postor único =
 DIVIDE (
-    CALCULATE ( [Processes], fact_process[is_competitive] = TRUE (), fact_process[n_tenderers] = 1 ),
-    [Competitive Processes]
+    CALCULATE ( [Procesos], fact_process[is_competitive] = TRUE (), fact_process[n_tenderers] = 1 ),
+    [Procesos competitivos]
 )
 
-// Single-bid rate of the current entity/method vs. the national rate for the same method.
-// (Used by the review protocol: C02 alone is reviewed only when this is > 1.)
-Single-Bid Rate vs National =
-VAR Local = [Single-Bid Rate]
-VAR National =
-    CALCULATE ( [Single-Bid Rate], REMOVEFILTERS ( dim_entity ) )
+// Tasa de postor único de la entidad o método actual frente a la nacional del mismo método.
+// (La usa el protocolo de revisión: «un solo postor» se revisa sola solo si esto es mayor a 1.)
+Postor único frente al país =
+VAR Local = [Tasa de postor único]
+VAR Nacional =
+    CALCULATE ( [Tasa de postor único], REMOVEFILTERS ( dim_entity ) )
 RETURN
-    DIVIDE ( Local, National )
+    DIVIDE ( Local, Nacional )
 
-// C04 - Herfindahl-Hirschman Index on awarded amount for the current filter context
-// (use with dim_entity x dim_segment x year on rows; never with dim_supplier on rows).
-HHI =
-VAR Total = [Awarded Amount (PEN)]
+// Concentración: índice de Herfindahl-Hirschman sobre el monto adjudicado en el contexto actual
+// (úselo con tipo de entidad × segmento × año en filas; nunca con proveedores en filas).
+Índice de concentración (HHI) =
+VAR Total = [Monto adjudicado (S/)]
 RETURN
     IF (
         Total > 0,
         10000
             * SUMX (
                 VALUES ( fact_process[supplier_key] ),
-                DIVIDE ( CALCULATE ( [Awarded Amount (PEN)] ), Total ) ^ 2
+                DIVIDE ( CALCULATE ( [Monto adjudicado (S/)] ), Total ) ^ 2
             )
     )
 
-HHI Highly Concentrated (flag) = IF ( [HHI] > 2500, 1, 0 )    // thresholds.yaml: hhi_highly_concentrated
+Altamente concentrado (1 = sí) = IF ( [Índice de concentración (HHI)] > 2500, 1, 0 )    // thresholds.yaml: hhi_highly_concentrated
 
-// C06 - cumulative increase of amended contracts
-Amended Contracts =
+// Contratos que crecen: aumento acumulado de los contratos modificados
+Contratos modificados =
 CALCULATE ( COUNTROWS ( fact_contract ), NOT ISBLANK ( fact_contract[final_amount] ) )
 
-Mean Amendment Increase % =
+Aumento promedio por adendas % =
 AVERAGEX (
     FILTER ( fact_contract, NOT ISBLANK ( fact_contract[final_amount] ) && fact_contract[original_amount] > 0 ),
     fact_contract[final_amount] / fact_contract[original_amount] - 1
 )
 
-// C09 - award to signature
-Median Days Award to Signature = MEDIAN ( fact_contract[days_award_to_signature] )
+// Demora en la firma
+Días hasta la firma (mediana) = MEDIAN ( fact_contract[days_award_to_signature] )
 
-// C08 - Benford (aggregate only)
-Benford MAD (all awards) =
+// Benford (solo agregado)
+Desviación Benford (todas las adjudicaciones) =
 CALCULATE ( MAX ( fact_benford[mad] ), fact_benford[scope_type] = "all" )
 
-Entities Beyond Sampling Noise =
+Entidades fuera de lo esperable por azar =
 CALCULATE ( COUNTROWS ( fact_benford ), fact_benford[scope_type] = "buyer", fact_benford[flag] = TRUE () )
 
-// ---- Data quality ----------------------------------------------------------------------------
-DQ Critical Issues = CALCULATE ( COUNTROWS ( fact_dq_issue ), fact_dq_issue[severity] = "critical" )
+// ---- Calidad del dato ------------------------------------------------------------------------
+Problemas de datos críticos = CALCULATE ( COUNTROWS ( fact_dq_issue ), fact_dq_issue[severity] = "critical" )
 
-DQ Warning Issues = CALCULATE ( COUNTROWS ( fact_dq_issue ), fact_dq_issue[severity] = "warning" )
+Problemas de datos menores = CALCULATE ( COUNTROWS ( fact_dq_issue ), fact_dq_issue[severity] = "warning" )
 
-// ---- Time intelligence -----------------------------------------------------------------------
-% Flagged Previous Year =
-CALCULATE ( [% Processes Flagged], SAMEPERIODLASTYEAR ( dim_date[date] ) )
+// ---- Tiempo ----------------------------------------------------------------------------------
+% Con alerta año anterior =
+CALCULATE ( [% Procesos con alerta], SAMEPERIODLASTYEAR ( dim_date[date] ) )
 
-% Flagged YoY (pp) = ( [% Processes Flagged] - [% Flagged Previous Year] ) * 100
+Cambio frente al año anterior (puntos) = ( [% Procesos con alerta] - [% Con alerta año anterior] ) * 100
 
-// ---- Disclaimer card -------------------------------------------------------------------------
-Disclaimer =
-"Signals, never accusations: an alert means this deserves a review, not that there is an irregularity."
+// ---- Tarjeta de aviso ------------------------------------------------------------------------
+Aviso =
+"Señales, nunca acusaciones: una alerta significa que el caso merece revisión, no que haya una irregularidad."
