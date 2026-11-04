@@ -17,10 +17,10 @@ control catalog and a signal engine.
 | Phase | Content | State |
 |---|---|---|
 | 1 | Ingestion (OCDS → DuckDB) and data-quality report | done |
-| 2 | Control catalog | in progress |
-| 3 | Signal engine | pending |
-| 4 | Validation of the controls | pending |
-| 5 | Site and Power BI model | pending |
+| 2 | Control catalog (9 controls) | done |
+| 3 | Signal engine + composite risk score | done |
+| 4 | Validation (injected patterns + blind case review) | done |
+| 5 | MkDocs site + Power BI model | done |
 
 ## Run it
 

@@ -13,4 +13,20 @@ markdown_extensions: [tables, admonition, attr_list, md_in_html, toc]
 nav:
   - Overview: index.md
   - Data quality: data-quality.md
+  - Control catalog:
+      - controls/index.md
+      - C01 Split purchases: controls/c01.md
+      - C02 Single bidder: controls/c02.md
+      - C03 Short submission period: controls/c03.md
+      - C04 Supplier concentration (HHI): controls/c04.md
+      - C05 Repeated winner: controls/c05.md
+      - C06 Amendment increase: controls/c06.md
+      - C07 Price outlier: controls/c07.md
+      - C08 Benford (aggregate): controls/c08.md
+      - C09 Award-to-signature time: controls/c09.md
+  - Risk score: risk-score.md
+  - Trends: trends.md
+  - Validation: validation.md
   - Decisions: DECISIONS.md
+not_in_nav: |
+  validation/review_judgments.yaml

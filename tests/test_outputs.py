@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-PUBLIC = [p for p in (ROOT / "outputs").rglob("*.csv") if "private" not in p.parts]
+PRIVATE = {"private", "powerbi"}  # git-ignored, alert-level
+PUBLIC = [p for p in (ROOT / "outputs").rglob("*.csv") if not PRIVATE & set(p.parts)]
 
 
 @pytest.mark.skipif(not PUBLIC, reason="pipeline has not been run")

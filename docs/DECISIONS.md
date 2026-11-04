@@ -170,3 +170,35 @@ alerts nobody has looked at is a list of alarms, not a control.
 **D26 - On real data, the same protocol without the reveal.** The worksheet
 (`outputs/private/review_worksheet.csv`) is alert-level and git-ignored. Only the anonymised
 verdict table is published. *Why:* rule 2 still applies when the review is done by hand.
+
+## Phase 5 · Site and Power BI
+
+**D27 - MkDocs Material, not Quarto.** *Why:* the whole pipeline is Python, MkDocs installs from
+pip with no extra binary, and GitHub Pages builds it in one job. The site is generated from the
+warehouse and the catalog on every run, so no page can drift from the controls that actually ran.
+
+**D28 - Static charts plus the CSV behind each one.** Each chart is a PNG that matplotlib draws
+in the pipeline, and its binned data is published in `outputs/distributions/`. *Why:* the charts
+are reproducible in CI, and the CSV is the accessible table view. A single series per chart means
+no legend is needed, and thresholds are drawn and labelled on the chart. Colours come from the
+validated reference palette (one blue series, one orange threshold).
+
+**D29 - Every chart shows the population, never the alert list.** Each signal page shows the
+distribution of the measured quantity for *all* processes, with the threshold on it. Examples:
+amount relative to the limit, bidders per process, HHI per cell. *Why:* a reviewer judges a
+threshold by seeing where it cuts the distribution. A list of flagged cases would also break
+rule 2.
+
+**D30 - Benford entities are plotted anonymously.** The C08 chart shows each entity as an
+unlabeled dot, its observed MAD against the MAD expected from noise. *Why:* rule 2 says
+entities appear only in aggregates, and the chart's point is the method (noise vs. signal), not
+naming anyone.
+
+**D31 - Power BI reads the alerts; it does not re-implement the rules.** `fact_alert` is
+imported, and DAX re-computes only aggregates: rates, HHI, the noisy-OR score for what-if
+analysis by control. *Why:* a control is written once. Two implementations of a rule would
+eventually disagree.
+
+**D32 - Power BI extracts are git-ignored.** They are alert-level (OCIDs, pseudonymised
+supplier keys). *Why:* the same privacy and no-ranking rules apply to the BI layer, and
+`MODEL.md` says the `.pbix` stays internal.

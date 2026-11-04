@@ -1,0 +1,116 @@
+// =============================================================================================
+// Peru procurement controls - DAX measures equivalent to the Python/SQL pipeline.
+// Model: see powerbi/MODEL.md. Load the CSVs from outputs/powerbi/ (created by `make pipeline`).
+//
+// Signals, never accusations: an alert means "this deserves a review", not "there is an
+// irregularity". Do not build visuals that rank suppliers, officials or named people; show
+// public entities only in aggregated visuals (by type, segment, method, month).
+// =============================================================================================
+
+// ---- Volumes ---------------------------------------------------------------------------------
+Processes = DISTINCTCOUNT ( fact_process[ocid] )
+
+Competitive Processes =
+CALCULATE ( [Processes], fact_process[is_competitive] = TRUE () )
+
+Awarded Amount (PEN) = SUM ( fact_process[award_amount] )
+
+// ---- Alerts ----------------------------------------------------------------------------------
+Alerts = COUNTROWS ( fact_alert )
+
+Flagged Processes = DISTINCTCOUNT ( fact_alert[ocid] )
+
+% Processes Flagged = DIVIDE ( [Flagged Processes], [Processes] )
+
+Alerts per 100 Processes = DIVIDE ( [Alerts], [Processes] ) * 100
+
+P1 Processes =
+CALCULATE ( DISTINCTCOUNT ( fact_risk_score[ocid] ), fact_risk_score[priority] = "P1" )
+
+Mean Risk Score (flagged) = AVERAGE ( fact_risk_score[score] )
+
+// Recomputes the noisy-OR score from the alerts, so a filter on dim_control (e.g. "without C02")
+// shows how the score would look with a subset of controls.
+// score = 100 * (1 - PRODUCT over controls (1 - max(weight * severity)))
+Risk Score (recomputed) =
+VAR PerControl =
+    ADDCOLUMNS (
+        SUMMARIZE ( fact_alert, fact_alert[ocid], fact_alert[control_id] ),
+        "@ws", CALCULATE ( MAX ( fact_alert[weighted_severity] ) )
+    )
+VAR PerProcess =
+    ADDCOLUMNS (
+        VALUES ( fact_alert[ocid] ),
+        "@score",
+            100 * ( 1 - PRODUCTX ( FILTER ( PerControl, fact_alert[ocid] = EARLIER ( fact_alert[ocid] ) ), 1 - [@ws] ) )
+    )
+RETURN
+    AVERAGEX ( PerProcess, [@score] )
+
+// ---- Control-specific measures ---------------------------------------------------------------
+// C02 - single-bid rate among competitive processes
+Single-Bid Rate =
+DIVIDE (
+    CALCULATE ( [Processes], fact_process[is_competitive] = TRUE (), fact_process[n_tenderers] = 1 ),
+    [Competitive Processes]
+)
+
+// Single-bid rate of the current entity/method vs. the national rate for the same method.
+// (Used by the review protocol: C02 alone is reviewed only when this is > 1.)
+Single-Bid Rate vs National =
+VAR Local = [Single-Bid Rate]
+VAR National =
+    CALCULATE ( [Single-Bid Rate], REMOVEFILTERS ( dim_entity ) )
+RETURN
+    DIVIDE ( Local, National )
+
+// C04 - Herfindahl-Hirschman Index on awarded amount for the current filter context
+// (use with dim_entity x dim_segment x year on rows; never with dim_supplier on rows).
+HHI =
+VAR Total = [Awarded Amount (PEN)]
+RETURN
+    IF (
+        Total > 0,
+        10000
+            * SUMX (
+                VALUES ( fact_process[supplier_key] ),
+                DIVIDE ( CALCULATE ( [Awarded Amount (PEN)] ), Total ) ^ 2
+            )
+    )
+
+HHI Highly Concentrated (flag) = IF ( [HHI] > 2500, 1, 0 )    // thresholds.yaml: hhi_highly_concentrated
+
+// C06 - cumulative increase of amended contracts
+Amended Contracts =
+CALCULATE ( COUNTROWS ( fact_contract ), NOT ISBLANK ( fact_contract[final_amount] ) )
+
+Mean Amendment Increase % =
+AVERAGEX (
+    FILTER ( fact_contract, NOT ISBLANK ( fact_contract[final_amount] ) && fact_contract[original_amount] > 0 ),
+    fact_contract[final_amount] / fact_contract[original_amount] - 1
+)
+
+// C09 - award to signature
+Median Days Award to Signature = MEDIAN ( fact_contract[days_award_to_signature] )
+
+// C08 - Benford (aggregate only)
+Benford MAD (all awards) =
+CALCULATE ( MAX ( fact_benford[mad] ), fact_benford[scope_type] = "all" )
+
+Entities Beyond Sampling Noise =
+CALCULATE ( COUNTROWS ( fact_benford ), fact_benford[scope_type] = "buyer", fact_benford[flag] = TRUE () )
+
+// ---- Data quality ----------------------------------------------------------------------------
+DQ Critical Issues = CALCULATE ( COUNTROWS ( fact_dq_issue ), fact_dq_issue[severity] = "critical" )
+
+DQ Warning Issues = CALCULATE ( COUNTROWS ( fact_dq_issue ), fact_dq_issue[severity] = "warning" )
+
+// ---- Time intelligence -----------------------------------------------------------------------
+% Flagged Previous Year =
+CALCULATE ( [% Processes Flagged], SAMEPERIODLASTYEAR ( dim_date[date] ) )
+
+% Flagged YoY (pp) = ( [% Processes Flagged] - [% Flagged Previous Year] ) * 100
+
+// ---- Disclaimer card -------------------------------------------------------------------------
+Disclaimer =
+"Signals, never accusations: an alert means this deserves a review, not that there is an irregularity."

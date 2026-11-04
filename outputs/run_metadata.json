@@ -37,5 +37,8 @@
     "dq_detected": 57,
     "dq_injected": 57,
     "review_judged": 20
+  },
+  "report": {
+    "pages": 13
   }
 }

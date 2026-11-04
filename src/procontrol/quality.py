@@ -241,11 +241,19 @@ def run_quality(con: duckdb.DuckDBPyConnection) -> dict[str, pd.DataFrame]:
     return {"summary": summary, "completeness": completeness, "volumes": volumes}
 
 
+def _cell(v) -> str:
+    if isinstance(v, list | tuple):
+        return ", ".join(map(str, v))
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return ""
+    return str(v).replace("|", "/").replace("\n", " ")
+
+
 def _md_table(df: pd.DataFrame) -> str:
     cols = list(df.columns)
     lines = ["| " + " | ".join(cols) + " |", "|" + "|".join("---" for _ in cols) + "|"]
     for row in df.itertuples(index=False):
-        lines.append("| " + " | ".join("" if pd.isna(v) else str(v) for v in row) + " |")
+        lines.append("| " + " | ".join(_cell(v) for v in row) + " |")
     return "\n".join(lines)
 
 
