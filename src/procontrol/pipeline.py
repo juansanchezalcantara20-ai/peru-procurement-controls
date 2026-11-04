@@ -28,8 +28,9 @@ SOURCE_LABELS = {
 
 
 class Pipeline:
-    def __init__(self, cfg: Config | None = None):
+    def __init__(self, cfg: Config | None = None, years: list[int] | None = None):
         self.cfg = cfg or Config.load()
+        self.years = years
         self.state_file = self.cfg.path("outputs") / "run_metadata.json"
         self.meta: dict = {}
 
@@ -37,18 +38,21 @@ class Pipeline:
     def acquire(self) -> list[Path]:
         source = self.cfg.settings["source"]
         order = ["oece", "perucompras", "synthetic"] if source == "auto" else [source]
+        errors = []
         for src in order:
             if src == "synthetic":
                 info = generate(self.cfg)
                 self.meta.update(source="synthetic", synthetic=info)
+                self.meta.pop("download", None)
                 return [Path(info["path"])]
             try:
-                paths = download(self.cfg, src)
-                self.meta.update(source=src, files=[str(p) for p in paths])
+                paths, record = download(self.cfg, src, self.years)
+                self.meta.update(source=src, files=[str(p) for p in paths], download=record)
                 return paths
             except DownloadError as exc:
                 log.warning("La fuente %s no está disponible: %s", src, exc)
-        raise RuntimeError("Ninguna fuente de datos está disponible")
+                errors.append(f"{src}: {exc}")
+        raise DownloadError("Ninguna fuente de datos está disponible. " + " | ".join(errors))
 
     def connect(self) -> duckdb.DuckDBPyConnection:
         wh = self.cfg.path("warehouse")

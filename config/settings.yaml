@@ -38,6 +38,7 @@ registry:
       status: provided_by_owner
   retries: 5                 # reintentos por archivo ante cortes o errores 5xx
   timeout_seconds: 120       # tiempo máximo sin recibir datos
+  backoff_seconds: 10        # espera antes del primer reintento; se duplica en cada intento
 
 privacy:
   # Las personas naturales (RUC que empieza con 10, 15 o 17, o identificadores DNI) se reemplazan

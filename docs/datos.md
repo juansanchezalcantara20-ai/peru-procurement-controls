@@ -74,7 +74,7 @@ comparar precios, pero el proceso sigue revisándose en las señales que no usan
 
 ## Cómo se protegen los datos personales
 
-Los proveedores que son personas naturales (su RUC empieza con 10, 15 o 17) se reemplazan, al
+Los proveedores que son personas naturales (su número de contribuyente empieza con 10, 15 o 17) se reemplazan, al
 momento de leer los datos, por un código anónimo que no se puede revertir sin una clave secreta.
 Antes de publicar este sitio, una prueba automática revisa que no aparezca el nombre de ningún
 proveedor, funcionario o persona, ni el nombre de ninguna entidad pública; si aparece uno, el sitio

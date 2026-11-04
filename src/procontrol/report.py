@@ -148,11 +148,15 @@ class Site:
     propósito para comprobar que las señales los encuentran. No describe a ninguna entidad real.
     Cuando corran los datos reales, este aviso cambiará solo.
 """
+        who = {"oece": "del OECE (Organismo Especializado para las Contrataciones Públicas Eficientes)",
+               "perucompras": "de Perú Compras (la central de compras del Estado)"}.get(
+            self.meta.get("source"), "")
+        when = fecha((self.meta.get("download") or {}).get("downloaded_at"))
         return f"""!!! note "Datos reales"
-    Las cifras de este sitio vienen de **{self.label}**, publicados en el registro de datos
-    abiertos de contrataciones de Open Contracting Partnership. La comprobación de que las señales
-    funcionan (página «¿Funciona?») se hizo con datos simulados, porque en datos reales no se sabe
-    de antemano qué casos son irregulares.
+    Las cifras de este sitio son **datos reales {who}, descargados el {when}**, publicados en el
+    registro de datos abiertos de contrataciones de Open Contracting Partnership. La comprobación
+    de que las señales funcionan (página «¿Funciona?») se hizo con datos simulados, porque en datos
+    reales no se sabe de antemano qué casos son irregulares.
 """
 
 
@@ -871,14 +875,16 @@ Eficientes) desde el registro de Open Contracting Partnership, corre todas las s
 este sitio. Cuando corra, este texto cambiará solo."""
     else:
         dl = s.meta.get("download") or {}
-        files = pd.DataFrame(dl.get("files", []))
+        files = pd.DataFrame([f for f in dl.get("files", [])
+                              if f.get("status") in ("descargado", "en caché")])
         ftab = ""
         if len(files):
             ftab = _md_table(pd.DataFrame({
                 "Año": files.year, "Tamaño": (files.bytes / 1e6).round(1).astype(str) + " MB",
                 "Descargado el": files.downloaded_at.map(fecha)}))
-        who = ("el OECE (Organismo Especializado para las Contrataciones Públicas Eficientes, antes "
-               "OSCE), a través del sistema SEACE (Sistema Electrónico de Contrataciones del Estado)"
+        who = ("el OECE (Organismo Especializado para las Contrataciones Públicas Eficientes), antes "
+               "llamado OSCE (Organismo Supervisor de las Contrataciones del Estado), a través del "
+               "sistema SEACE (Sistema Electrónico de Contrataciones del Estado)"
                if s.meta.get("source") == "oece" else
                "Perú Compras (la central de compras del Estado, que gestiona los acuerdos marco)")
         src = f"""**{s.label[0].upper() + s.label[1:]}.** Los publica {who}, en formato OCDS (Open
@@ -924,7 +930,7 @@ comparar precios, pero el proceso sigue revisándose en las señales que no usan
 
 ## Cómo se protegen los datos personales
 
-Los proveedores que son personas naturales (su RUC empieza con 10, 15 o 17) se reemplazan, al
+Los proveedores que son personas naturales (su número de contribuyente empieza con 10, 15 o 17) se reemplazan, al
 momento de leer los datos, por un código anónimo que no se puede revertir sin una clave secreta.
 Antes de publicar este sitio, una prueba automática revisa que no aparezca el nombre de ningún
 proveedor, funcionario o persona, ni el nombre de ninguna entidad pública; si aparece uno, el sitio

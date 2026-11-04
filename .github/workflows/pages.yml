@@ -1,9 +1,18 @@
-name: Site
+name: Sitio con datos simulados
+
+# Publica el sitio con datos simulados cada vez que cambia main, SOLO mientras el sitio publicado
+# no tenga datos reales. Cuando el flujo «Datos reales» ya publicó, este flujo no lo pisa: el sitio
+# real se actualiza en su próxima corrida mensual o al lanzarlo a mano.
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      forzar:
+        description: "Publicar con datos simulados aunque el sitio ya tenga datos reales"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -12,30 +21,62 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  build:
+  construir:
+    name: Construir y revisar
     runs-on: ubuntu-latest
+    outputs:
+      publicar: ${{ steps.decidir.outputs.publicar }}
     steps:
+      - name: ¿El sitio publicado ya tiene datos reales?
+        id: decidir
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          URL="https://${OWNER}.github.io/${{ github.event.repository.name }}/datos.json"
+          FUENTE=$(curl -fsSL "$URL" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("fuente",""))' 2>/dev/null || echo "")
+          echo "Fuente del sitio publicado: ${FUENTE:-ninguna}"
+          if [ -n "$FUENTE" ] && [ "$FUENTE" != "simulados" ] && [ "${{ inputs.forzar }}" != "true" ]; then
+            echo "El sitio publicado tiene datos reales ($FUENTE): no se reemplaza por datos simulados." >> "$GITHUB_STEP_SUMMARY"
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publicar=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.decidir.outputs.publicar == 'true'
       - uses: actions/setup-python@v5
+        if: steps.decidir.outputs.publicar == 'true'
         with:
           python-version: "3.13"
-      - run: python -m pip install -e ".[dev]"
-      - name: Reproduce the pipeline (synthetic, seeded)
+      - name: Instalar
+        if: steps.decidir.outputs.publicar == 'true'
+        run: python -m pip install -e ".[dev]"
+      - name: Proceso con datos simulados (semilla fija)
+        if: steps.decidir.outputs.publicar == 'true'
         run: python -m procontrol run
-      - name: Build site
+      - name: Construir el sitio
+        if: steps.decidir.outputs.publicar == 'true'
         run: python -m mkdocs build --strict
+      - name: Prueba de legibilidad del sitio
+        if: steps.decidir.outputs.publicar == 'true'
+        run: python -m procontrol legibilidad site
+      - name: Candado de privacidad
+        if: steps.decidir.outputs.publicar == 'true'
+        run: python -m procontrol privacidad site
       - uses: actions/upload-pages-artifact@v3
+        if: steps.decidir.outputs.publicar == 'true'
         with:
           path: site
-  deploy:
-    needs: build
+
+  publicar:
+    name: Publicar el sitio
+    needs: construir
+    if: needs.construir.outputs.publicar == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.despliegue.outputs.page_url }}
     steps:
-      - id: deployment
+      - id: despliegue
         uses: actions/deploy-pages@v4

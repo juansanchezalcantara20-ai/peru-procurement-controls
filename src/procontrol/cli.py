@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from .config import Config
+from .download import DownloadError
 from .pipeline import Pipeline
 
 STEPS = ["acquire", "ingest", "quality", "signals", "validate", "report"]
@@ -20,6 +21,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--steps", nargs="+", choices=STEPS, default=STEPS)
     run.add_argument("--source", choices=["synthetic", "oece", "perucompras", "auto"],
                      help="reemplaza la fuente de config/settings.yaml")
+    run.add_argument("--years", nargs="+", type=int,
+                     help="años a descargar (por defecto los de config/settings.yaml)")
     sub.add_parser("to-verify", help="lista los umbrales que siguen marcados to_verify")
     leg = sub.add_parser("legibilidad", help="revisa que el sitio construido se lea sin saber programar")
     leg.add_argument("site", nargs="?", default="site")
@@ -37,7 +40,13 @@ def main(argv: list[str] | None = None) -> int:
         return run_gate(cfg, args.cmd, Path(args.site))
     if args.source:
         cfg.settings["source"] = args.source
-    meta = Pipeline(cfg).run(args.steps)
+    if args.years:
+        cfg.settings["years"] = args.years
+    try:
+        meta = Pipeline(cfg, args.years).run(args.steps)
+    except DownloadError as exc:
+        print(f"\nERROR al descargar los datos: {exc}")
+        return 3
     print(f"listo - fuente: {meta.get('source')}")
     return 0
 

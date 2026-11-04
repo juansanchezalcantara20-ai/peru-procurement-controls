@@ -11,11 +11,15 @@ de control interno o de auditoría continua.
 > un seudónimo antes de guardar cualquier dato.
 
 > **Datos usados hasta ahora: simulados (Plan C).** El entorno donde se construyó el proyecto no
-> tenía acceso al registro de Open Contracting Partnership ni al portal del OECE. Todos los
-> resultados versionados vienen de un conjunto simulado con estructura OCDS (2024-2025, 12,500
-> procesos, 40 entidades) con patrones de riesgo sembrados a propósito, que no describe a ninguna
-> entidad real. El sitio dice «(datos simulados)» junto a cada cifra hasta que corran los datos
-> reales.
+> tenía acceso al registro de Open Contracting Partnership ni al portal del OECE (Organismo
+> Especializado para las Contrataciones Públicas Eficientes). Todos los resultados versionados
+> vienen de un conjunto simulado con estructura OCDS (2024-2025, 12,500 procesos, 40 entidades) con
+> patrones de riesgo sembrados a propósito, que no describe a ninguna entidad real. **Los datos
+> reales ya están conectados** mediante un flujo de GitHub Actions (ver «Datos reales» más abajo).
+> El sitio dice «(datos simulados)» junto a cada cifra hasta que ese flujo corra; después cambia
+> solo a «datos reales del OECE, descargados el [fecha]».
+
+**Sitio:** https://juansanchezalcantara20-ai.github.io/peru-procurement-controls/
 
 ## Resumen ejecutivo
 
@@ -75,6 +79,48 @@ python -m pytest && python -m ruff check src tests && python -m mkdocs serve
 Defina `PROCONTROL_SALT` con un valor secreto antes de procesar datos reales: es la clave del hash
 que seudonimiza a las personas naturales.
 
+## Datos reales: cómo lanzar el flujo desde GitHub
+
+El flujo **«Datos reales»** descarga las compras del OECE (publicación 135 del registro de Open
+Contracting Partnership) o de Perú Compras (publicación 78), corre todas las señales, revisa el
+sitio y lo publica. Corre solo el día 3 de cada mes; para lanzarlo a mano:
+
+1. Entre al repositorio en GitHub y abra la pestaña **Actions**.
+2. En la lista de la izquierda elija **Datos reales**.
+3. A la derecha pulse **Run workflow**. Deje la rama `main`, la fuente `oece` y los años
+   `2024 2025` (o cámbielos), y pulse el botón verde **Run workflow**.
+4. Espere. La primera vez puede tardar entre 30 minutos y un par de horas, porque los archivos
+   pesan varios GB. Puede cerrar la página; GitHub le avisará por correo si falla.
+5. Cuando los dos pasos («Descargar, procesar y revisar» y «Publicar el sitio») estén en verde,
+   abra el sitio: el aviso de arriba debe decir «Datos reales del OECE…, descargados el [fecha]».
+
+Opcional pero recomendable: en **Settings → Secrets and variables → Actions → New repository
+secret**, cree un secreto llamado `PROCONTROL_SALT` con cualquier texto largo y secreto. Si no
+existe, el flujo genera una clave al azar en cada corrida, lo que también protege a las personas
+naturales; el secreto solo sirve para que los seudónimos sean los mismos entre corridas.
+
+### Qué hacer si falla
+
+Abra la corrida en rojo y luego el paso marcado con una ✗. El mensaje está en español. **Si algo
+falla, el sitio no se publica y sigue mostrando la versión anterior**: nunca queda a medias.
+
+| Paso en rojo | Qué significa | Qué hacer |
+|---|---|---|
+| Descargar los datos reales… con «No se pudo descargar… después de 5 intentos» | Corte de red o registro saturado | Volver a lanzarlo en unas horas (**Re-run all jobs**) |
+| Descargar… con «No se descargó ningún año» | Esos años no existen en la publicación | Ver en data.open-contracting.org qué años hay y lanzarlo con esos años |
+| Descargar… con «no aparece en el registro» | Cambió el número de la publicación | Buscar el número nuevo en el registro y cambiarlo en `config/settings.yaml` |
+| Descargar… con «está dañado o incompleto» | El archivo llegó cortado | Volver a lanzarlo |
+| Liberar espacio / proceso con «No space left on device» | Los años pedidos no caben en el disco | Lanzarlo con un solo año (por ejemplo `2025`) |
+| Prueba de legibilidad del sitio | Algún texto nuevo quedó con código, inglés o una sigla sin explicar | El mensaje dice la página y el texto; corregirlo en `src/procontrol/report.py` o en `controls/catalog.yaml` |
+| Candado de privacidad | El sitio iba a mostrar el nombre de un proveedor, persona o entidad | **No forzar la publicación.** El mensaje dice la página (no el nombre); revisar qué texto lo trae |
+| Publicar el sitio | Pages no está activado | Settings → Pages → Source: «GitHub Actions», y relanzar |
+
+En cada corrida, en la parte de abajo de la página de la corrida, queda un archivo
+**registro-de-la-corrida** con lo que se descargó (años, tamaño, fecha y huella de cada archivo).
+
+El flujo **«Sitio con datos simulados»** sigue publicando el sitio simulado cada vez que cambia
+`main`, pero deja de hacerlo en cuanto el sitio publicado tiene datos reales: no los pisa.
+
 ## Cómo funciona
 
 ```
@@ -95,7 +141,8 @@ obtener ─► ingresar ─► calidad ─► señales ─► validar ─► inf
 | `powerbi/` | [`measures.dax`](powerbi/measures.dax) y [`MODEL.md`](powerbi/MODEL.md) (esquema en estrella, relaciones, páginas) |
 | `outputs/` | Solo resultados agregados y versionados. Los datos a nivel de alerta se quedan en el DuckDB local, ignorado por git |
 | `data/sample/` | 50 releases seudonimizados. Los datos crudos se descargan o generan, nunca se suben |
-| `tests/` | Más de 60 pruebas. Cada señal tiene casos pequeños que deben dispararla y otros que no |
+| `tests/` | Más de 90 pruebas. Cada señal tiene casos pequeños que deben dispararla y otros que no; también se prueban el descargador (contra una imitación local del registro) y las dos revisiones del sitio |
+| `.github/workflows/` | `ci.yml` (pruebas y revisiones del sitio en cada push), `datos-reales.yml` (datos reales, mensual o a mano), `pages.yml` (sitio simulado mientras no haya datos reales) |
 
 ### Las señales
 
@@ -145,8 +192,10 @@ revisión lo dice.
 
 ## Alcance y limitaciones
 
-* **Por ahora, solo datos simulados.** Los patrones, tasas y gráficos ilustran el método y no
-  dicen nada del Perú. El generador es simple: montos con distribución log-normal, proveedores
+* **Por ahora, solo datos simulados en el repositorio.** Los patrones, tasas y gráficos versionados
+  ilustran el método y no dicen nada del Perú. El flujo de datos reales está listo pero no se pudo
+  probar contra el registro desde el entorno de construcción; se probó contra una imitación local
+  del registro. El generador es simple: montos con distribución log-normal, proveedores
   elegidos por afinidad ponderada, y los montos de compras menores topados en 97% del límite, lo
   que crea un pico visible en el gráfico de compras partidas.
 * **La validación simulada es optimista.** Los casos sembrados son más limpios que los reales, así

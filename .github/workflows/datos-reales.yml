@@ -1,0 +1,122 @@
+name: Datos reales
+
+# Descarga las compras publicadas por el OECE (o por Perú Compras) desde el registro de
+# Open Contracting Partnership, corre todas las señales, revisa que el sitio se lea bien y que no
+# nombre a nadie, y solo entonces lo publica en GitHub Pages.
+# Se lanza a mano (botón «Run workflow») y además corre solo el día 3 de cada mes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      fuente:
+        description: "Fuente de datos"
+        type: choice
+        options: [oece, perucompras]
+        default: oece
+      anios:
+        description: "Años a descargar, separados por espacio"
+        type: string
+        default: "2024 2025"
+  schedule:
+    - cron: "17 9 3 * *"   # día 3 de cada mes a las 09:17 UTC (04:17 en Lima)
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  FUENTE: ${{ inputs.fuente || 'oece' }}
+  ANIOS: ${{ inputs.anios || '2024 2025' }}
+
+jobs:
+  construir:
+    name: Descargar, procesar y revisar
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Liberar espacio en disco (los archivos reales pesan varios GB)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h .
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Instalar
+        run: python -m pip install -e ".[dev]"
+
+      - name: Preparar la clave de seudonimización
+        env:
+          SECRETO: ${{ secrets.PROCONTROL_SALT }}
+        run: |
+          # Si el repositorio tiene el secreto PROCONTROL_SALT se usa; si no, se genera una clave
+          # aleatoria solo para esta corrida (los seudónimos no se guardan entre corridas).
+          CLAVE="${SECRETO:-$(openssl rand -hex 32)}"
+          echo "::add-mask::$CLAVE"
+          echo "PROCONTROL_SALT=$CLAVE" >> "$GITHUB_ENV"
+
+      - name: Descargar los datos reales y correr todas las señales
+        run: python -m procontrol run --source "$FUENTE" --years $ANIOS
+
+      - name: Construir el sitio
+        run: python -m mkdocs build --strict
+
+      - name: Prueba de legibilidad del sitio
+        run: python -m procontrol legibilidad site
+
+      - name: Candado de privacidad (si falla, no se publica nada)
+        run: python -m procontrol privacidad site
+
+      - name: Guardar el registro de la corrida
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: registro-de-la-corrida
+          path: |
+            data/raw/*/registro_descargas.json
+            outputs/run_metadata.json
+            outputs/quality/
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "## Corrida con datos reales"
+            echo ""
+            echo "- Fuente: **$FUENTE**"
+            echo "- Años pedidos: **$ANIOS**"
+            if [ -f docs/datos.json ]; then
+              echo "- Etiqueta del sitio: **$(python -c 'import json;print(json.load(open("docs/datos.json"))["etiqueta"])')**"
+            fi
+            if [ "${{ job.status }}" = "success" ]; then
+              echo "- Resultado: todo en orden; el sitio se publica en el siguiente paso."
+            else
+              echo "- Resultado: **falló**. El sitio NO se publicó y sigue mostrando la versión anterior."
+              echo "  Abra el paso en rojo para ver el mensaje; el README explica qué hacer en cada caso."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  publicar:
+    name: Publicar el sitio
+    needs: construir
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.despliegue.outputs.page_url }}
+    steps:
+      - id: despliegue
+        uses: actions/deploy-pages@v4

@@ -274,3 +274,41 @@ cuántas coincidencias hubo, pero no el nombre: los registros de GitHub Actions 
 público son públicos. Las instituciones que el sitio nombra como contexto (el OECE como fuente, la
 SUNAT en el glosario) están en una lista blanca de `config/settings.yaml`. *Por qué:* «no nombrar a
 nadie» tiene que ser una prueba que falla, no una intención.
+
+**D40. Los datos reales se descargan en GitHub Actions, no en el entorno de construcción.** El
+entorno donde se escribió el proyecto no tiene salida a internet, pero los servidores de GitHub
+Actions sí. El flujo `datos-reales.yml` corre a mano (`workflow_dispatch`, con la fuente y los años
+como opciones) y solo el día 3 de cada mes. Los identificadores de publicación (135 para el OECE y
+78 para Perú Compras) los entregó el dueño del proyecto. La forma de las URL se comprobó en el código
+fuente del registro (`data_registry/views.py`): `/en/publication/<id>/download?name=<año>.jsonl.gz`,
+con 400 para un nombre inválido, 404 si ese archivo no existe y redirección al servidor de
+descargas si existe. *Por qué:* es la única forma de conectar datos reales sin abrir la red del
+entorno de construcción.
+
+**D41. El descargador falla con mensajes que dicen qué hacer.** Antes de descargar confirma la
+publicación en `publications.json` (título, país y rango de fechas). Descarga en flujo, reintenta
+cortes y errores 5xx con espera creciente, retoma descargas a medias con `Range`, trata el 404 de un
+año como «ese año no existe» (sigue con los demás) y falla solo si no llegó ningún año. Comprueba
+que el archivo sea gzip y que su primera línea sea JSON, calcula su SHA-256 y escribe
+`registro_descargas.json`, que el flujo guarda como artefacto. La ingesta procesa por lotes de
+20,000 publicaciones, omite y cuenta las líneas dañadas y se detiene con un mensaje claro si el
+archivo está truncado. Se probó contra una imitación local del registro (redirección, 404, 503
+transitorio, contenido que no es gzip, publicación inexistente). *Por qué:* no se puede probar
+contra el registro real desde aquí, así que el código tiene que defenderse solo y decir qué pasó.
+
+**D42. Nada se publica si falla una revisión, y el sitio real no se pisa con el simulado.** El
+flujo de datos reales publica solo si pasan la construcción estricta, la prueba de legibilidad y
+el candado de privacidad. El flujo del sitio simulado lee el `datos.json` del sitio ya publicado y
+no lo reemplaza si su fuente es real, salvo que se lo fuerce a mano. La validación con casos
+sembrados (página «¿Funciona?») sigue usando los resultados simulados versionados, porque en datos
+reales no hay respuesta conocida. La revisión de casos a ciegas de datos reales queda privada. La
+clave de seudonimización sale del secreto `PROCONTROL_SALT`; si no existe, se genera una al azar
+para esa corrida, porque los seudónimos no se guardan entre corridas. *Por qué:* un sitio público
+con un nombre filtrado no se puede despublicar del todo, y un sitio real reemplazado sin aviso por
+uno simulado confundiría al lector.
+
+**D43. El aviso de origen cambia solo.** El sitio escribe `datos.json` con la fuente y la fecha de
+descarga, y cada cifra principal lleva al lado «(datos simulados)» o «(datos reales del OECE,
+descargados el DD/MM/AAAA)». Los textos de cada página cambian según la fuente (por ejemplo,
+«Esta fuente no incluye compras menores» si no las trae). *Por qué:* el lector nunca debe tener
+que adivinar si mira datos reales.

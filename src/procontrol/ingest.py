@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import logging
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
@@ -26,6 +27,8 @@ import duckdb
 import pandas as pd
 
 from .privacy import Pseudonymiser
+
+log = logging.getLogger(__name__)
 
 SCHEMA = {
     "releases": [
@@ -104,23 +107,36 @@ def _ts(value: str | None) -> pd.Timestamp | None:
 
 
 def iter_releases(paths: Iterable[Path]) -> Iterator[dict]:
+    """Yield releases from JSON Lines(.gz) files. Malformed lines are skipped and counted; a
+    truncated archive stops with a clear message."""
     for path in paths:
         opener = gzip.open if str(path).endswith(".gz") else open
-        with opener(path, "rt", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                obj = json.loads(line)
-                # Accept release packages and record packages as well as bare releases.
-                if "releases" in obj and isinstance(obj["releases"], list):
-                    yield from obj["releases"]
-                elif "records" in obj:
-                    for rec in obj["records"]:
-                        if "compiledRelease" in rec:
-                            yield rec["compiledRelease"]
-                else:
-                    yield obj
+        bad = 0
+        try:
+            with opener(path, "rt", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except ValueError:
+                        bad += 1
+                        continue
+                    # Accept release packages and record packages as well as bare releases.
+                    if "releases" in obj and isinstance(obj["releases"], list):
+                        yield from obj["releases"]
+                    elif "records" in obj:
+                        for rec in obj["records"]:
+                            if "compiledRelease" in rec:
+                                yield rec["compiledRelease"]
+                    else:
+                        yield obj
+        except (EOFError, OSError) as exc:
+            raise RuntimeError(f"El archivo {path.name} está incompleto o dañado ({exc}). "
+                               "Bórrelo de data/raw y vuelva a descargarlo.") from exc
+        if bad:
+            log.warning("%s: se omitieron %s líneas que no eran JSON válido.", path.name, bad)
 
 
 def flatten(releases: Iterable[dict], pseudo: Pseudonymiser, names: set[str] | None = None,
