@@ -1,0 +1,9 @@
+control_id,injected_pattern,injected,detected,recall,alerts,on_target_pattern,on_other_injected_pattern,on_background,precision_vs_target,background_fp_share,background_alert_rate_pct
+C01,split_purchase,102,102,1.0,113,102,3,8,0.903,0.071,0.07
+C02,single_bid,60,60,1.0,810,60,89,661,0.074,0.816,5.95
+C03,short_submission_period,50,50,1.0,134,50,14,70,0.373,0.522,0.63
+C04,supplier_concentration,143,143,1.0,572,143,37,392,0.25,0.685,3.53
+C05,repeated_winner,89,89,1.0,201,89,74,38,0.443,0.189,0.34
+C06,amendment_increase,30,30,1.0,72,30,7,35,0.417,0.486,0.32
+C07,price_outlier,40,38,0.95,218,38,170,10,0.174,0.046,0.09
+C09,award_signature_delay,30,30,1.0,53,30,1,22,0.566,0.415,0.2

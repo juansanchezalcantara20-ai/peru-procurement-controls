@@ -169,5 +169,6 @@ def test_c09_delay():
         release("late", award="2025-04-01", signed="2025-07-15"),
         release("ok", award="2025-04-01", signed="2025-04-10"),
         release("bad_dates", award="2025-04-01", signed="2025-01-01"),  # DQ09, excluded
+        release("minor_late", method="direct", tender_days=None, award="2025-04-01", signed="2025-08-01"),
     ]
     assert flagged(rels, "C09") == {"late"}

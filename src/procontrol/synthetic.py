@@ -294,7 +294,10 @@ class SyntheticGenerator:
                 if big.qty > 1:
                     big.qty = max(1, int(big.qty * 0.8))
                 else:
-                    big.unit = round(big.unit * 0.8, 2)
+                    # a single unit above the limit (e.g. a works package): price the job at the
+                    # target instead of shrinking it towards the limit, which would create an
+                    # artificial pile of amounts just under 8 UIT
+                    big.unit = round(min(target, 0.97 * lim) / len(items), 2)
         start = start or self._rand_dt(year)
         estimate = sum(i.qty * i.unit for i in items)
         if method in COMPETITIVE:

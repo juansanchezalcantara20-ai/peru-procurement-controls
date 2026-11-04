@@ -143,3 +143,30 @@ appear only in aggregates. A file listing flagged OCIDs is one join away from a 
 processes awarded to the dominant supplier of the cell. Repeated-winner and split-purchase
 alerts flag every member process. *Why:* a reviewer works on case files, so an alert has to
 point at one. The cell-level evidence travels in the `evidence` JSON.
+
+## Phase 4 · Validation of the controls
+
+**D24 - "False positive" on synthetic data means "background alert".** The background is
+generated with no risk intent, so an alert on it is a false positive by construction. Recall is
+measured per injected pattern. Precision is reported twice: against the control's own pattern,
+and as the share of alerts on neutral background. Some injections mechanically produce another
+control's signal. Fabricated amounts create price outliers, and forced dominance creates
+repeated winners. The reveal counts those explicitly (`AFFECTS` in `validation.py`) instead of
+hiding them. *Why:* a single precision number would either flatter the controls or punish them
+for detecting a real overlap.
+
+**D25 - The case review is blind, and it changed the design.** I sampled 20 alerts (2 per
+process control plus the top-scored processes), with seeded hashing so the sample is
+reproducible. I judged each one from the worksheet context only, wrote the verdicts in
+`docs/validation/review_judgments.yaml`, and computed the reveal afterwards. Outcomes:
+(1) C09 now excludes minor/direct purchases, because a purchase order has no signing step.
+This was applied, the sample was redrawn and the one new case was judged. Its ground truth was
+displayed before judging, so it is marked `blind: false` and kept out of the agreement count.
+(2) C03 cannot be triaged by shortfall until the business-day minimums are verified, since the
+review dismissed a planted case. (3) C02 is reviewed only together with other signals or when
+the entity's single-bid rate exceeds the national rate for the method. *Why:* a control whose
+alerts nobody has looked at is a list of alarms, not a control.
+
+**D26 - On real data, the same protocol without the reveal.** The worksheet
+(`outputs/private/review_worksheet.csv`) is alert-level and git-ignored. Only the anonymised
+verdict table is published. *Why:* rule 2 still applies when the review is done by hand.

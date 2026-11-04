@@ -1,0 +1,4 @@
+scope,scopes_tested,nigrini_nonconformity,flagged_beyond_noise,mean_mad,mean_mad_null
+all awards,1,0,1,0.0077,0.0021
+injected entity,1,1,1,0.0293,0.0078
+other entities,15,7,0,0.0154,0.012

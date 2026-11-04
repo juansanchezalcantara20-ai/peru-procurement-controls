@@ -17,18 +17,25 @@
     "amendments": 708
   },
   "signals": {
-    "alerts": 2252,
-    "processes_with_alerts": 2011,
+    "alerts": 2173,
+    "processes_with_alerts": 1937,
     "controls_run": 9,
     "by_control": {
-      "C01": 162,
+      "C01": 113,
       "C02": 810,
       "C03": 134,
       "C04": 572,
       "C05": 201,
       "C06": 72,
-      "C07": 215,
-      "C09": 86
+      "C07": 218,
+      "C09": 53
     }
+  },
+  "validate": {
+    "review_cases": 20,
+    "mean_recall": 0.994,
+    "dq_detected": 57,
+    "dq_injected": 57,
+    "review_judged": 20
   }
 }

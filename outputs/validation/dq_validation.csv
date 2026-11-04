@@ -1,0 +1,8 @@
+defect,check_id,injected,detected,flagged_total
+duplicate_ocid,DQ01,15,15,15
+missing_buyer_id,DQ02,8,8,8
+negative_award_amount,DQ04,10,10,10
+absurd_award_amount,DQ05,5,5,5
+non_pen_currency,DQ06,6,6,6
+tender_end_before_start,DQ07,3,3,3
+contract_signed_before_award,DQ09,10,10,10

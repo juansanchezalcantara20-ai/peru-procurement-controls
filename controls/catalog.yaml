@@ -279,10 +279,12 @@ controls:
     control_objective: "Contracts are signed promptly after award, under the conditions awarded."
     risk_mitigated: "Renegotiation of awarded conditions before signature, or pressure on the winner."
     rule: >-
-      For contracts with a valid signature date (not before the award), flag when the days
-      between award date and signature exceed max_days.
+      For contracts with a valid signature date (not before the award) whose procurementMethod
+      is not in excluded_methods, flag when the days between award date and signature exceed
+      max_days.
     parameters:
       max_days: { value: 60, unit: days, note: "internal policy; the legal signing deadline in business days is to_verify" }
+      excluded_methods: { value: [direct], note: "minor/direct purchase orders have no signing step; added after the case review (D25)" }
     threshold: "> 60 calendar days from award to signature"
     frequency: monthly
     owner_role: "Contract administrator"
