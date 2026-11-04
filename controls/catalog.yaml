@@ -1,0 +1,299 @@
+# Control catalog - the single source of truth for every signal.
+#
+# The engine (src/procontrol/engine.py) reads this file, resolves the parameters (literal values
+# or references into config/thresholds.yaml), runs the SQL file named in `sql` against the clean
+# analytical layer (f_* views) and writes the alerts. No rule is written twice: the SQL file is
+# the exact rule, this file is its documentation and configuration, and the site, the tests and
+# the Power BI model all read from here.
+#
+# Signals, never accusations: an alert means "this deserves a review", not "there is an
+# irregularity".
+#
+# Methodological reference: Open Contracting Partnership, "Red Flags for Integrity: Giving the
+# green light to open data solutions" (2016), and the OCP Cardinal library of red-flag indicators
+# (https://cardinal.readthedocs.io). Cardinal codes are cited only where the rule matches the
+# indicator definition; other controls follow the concept of the guide but are this project's own
+# operationalisation.
+#
+# Fields
+#   level                  process (one alert per contracting process) | aggregate (population test)
+#   parameters             value: literal | ref: dotted path in thresholds.yaml
+#   weight                 contribution to the composite risk score (0-1), see risk_score below
+#   expected_false_positives  qualitative causes + an a-priori rate band, measured in Phase 4
+
+version: 1
+owner_of_catalog: "Internal Control / Continuous Auditing lead"
+review_cycle: "Quarterly, and after any change in procurement law or thresholds"
+
+risk_score:
+  method: noisy_or
+  formula: "score = 100 * (1 - PROD_c (1 - weight_c * severity_c))  over the process's alerts"
+  rationale: >-
+    Each alert is treated as independent evidence that a process deserves a review. The noisy-OR
+    keeps the score between 0 and 100, makes it grow with every additional signal, and saturates
+    instead of adding up linearly, so ten weak signals do not outrank two strong ones. The weight
+    of a control is its specificity: how likely an alert from that control alone is to be worth a
+    reviewer's time, given its expected false-positive profile. The severity (0-1, computed by
+    each rule) is how far past its threshold the case is. Aggregate tests (Benford) never enter
+    the score, because they say nothing about an individual process.
+  review_priority:
+    P1: ">= 50  - review within the cycle"
+    P2: "25-50 - sample for review"
+    P3: "< 25  - monitor only"
+
+controls:
+  - id: C01
+    name: Split purchases below the minor-purchase limit
+    ocp_reference: "OCP Red Flags for Integrity (2016) - tender stage: contract splitting to avoid competitive procedures"
+    control_objective: >-
+      Purchases that by aggregate value should go through a competitive procedure are not
+      fragmented into several minor purchases.
+    risk_mitigated: >-
+      Avoidance of competition and of the controls of a more demanding procedure by splitting a
+      requirement into purchases just under the 8 UIT limit.
+    rule: >-
+      For the same buyer, the same supplier and the same UNSPSC segment, flag every minor
+      (non-competitive) purchase with an amount between near_limit_ratio x limit and the limit,
+      when at least min_purchases such purchases fall within window_days of the first one and
+      their sum exceeds the limit of the year. The limit is minor_purchase_limit_uit x the UIT
+      of the purchase year.
+    parameters:
+      limit_uit: { ref: minor_purchase_limit_uit.value, unit: UIT }
+      near_limit_ratio: { value: 0.80, unit: ratio, note: "internal policy: 'just below' = top 20% of the band" }
+      window_days: { value: 30, unit: days, note: "internal policy: one monthly purchasing cycle" }
+      min_purchases: { value: 3, unit: count }
+      minor_methods: { value: [direct], note: "OCDS procurementMethod values treated as minor/direct purchases" }
+    threshold: "3+ purchases at 80-100% of 8 UIT, same buyer-supplier-segment, within 30 days, sum > 8 UIT"
+    frequency: monthly
+    owner_role: "Procurement controller (Logistics/Abastecimiento) with Internal Control"
+    evidence: "Cluster id, member OCIDs, dates, amounts, cluster total vs. limit, UNSPSC segment"
+    expected_false_positives:
+      rate_band: "medium-high (30-60% of alerts legitimate)"
+      causes:
+        - Recurring consumables bought monthly from the incumbent (fuel, food, cleaning supplies)
+        - Genuinely unforeseen needs in the same category
+        - Purchases under a framework agreement published as separate orders
+    weight: 0.55
+    weight_rationale: "Strong pattern when it fires, but recurring legitimate purchases are common."
+    level: process
+    sql: controls/sql/c01_split_purchases.sql
+
+  - id: C02
+    name: Single bidder in a competitive procedure
+    ocp_reference: "OCP Cardinal R018 - Single bid received; OCP Red Flags for Integrity (2016)"
+    control_objective: "Competitive procedures attract real competition."
+    risk_mitigated: >-
+      Restrictive specifications, poor publicity or collusion that leave a single bidder and
+      remove price discipline.
+    rule: >-
+      Flag every process whose procurementMethod is in competitive_methods and whose number of
+      distinct bidders (from bids, falling back to numberOfTenderers) equals 1.
+    parameters:
+      competitive_methods: { value: [open, selective], note: "Cardinal default" }
+    threshold: "bidders = 1"
+    frequency: monthly
+    owner_role: "Procurement controller"
+    evidence: "OCID, method, number of bidders, award amount"
+    expected_false_positives:
+      rate_band: "high (50-80% legitimate)"
+      causes:
+        - Thin markets (specialised equipment, remote regions)
+        - Re-launched procedures after a void call
+        - Missing bid data in the publication (counts only the published bidders)
+    weight: 0.35
+    weight_rationale: "Very common and often structural; weak evidence on its own, valuable in combination."
+    level: process
+    sql: controls/sql/c02_single_bid.sql
+
+  - id: C03
+    name: Abnormally short submission period
+    ocp_reference: "OCP Cardinal R003 - Short submission period; OCP Red Flags for Integrity (2016)"
+    control_objective: "Bidders get enough time to prepare offers."
+    risk_mitigated: "A deadline too short to compete, which favours a bidder who knew in advance."
+    rule: >-
+      For competitive processes with a valid tender period, flag when the whole days between
+      tenderPeriod.startDate and tenderPeriod.endDate are below the minimum for the method
+      (min_submission_days.by_method), or below the default when the method is not listed.
+    parameters:
+      default_min_days: { ref: min_submission_days.default.value, unit: days }
+      by_method: { ref: min_submission_days.by_method, note: "loaded as reference table ref_min_submission_days" }
+    threshold: "period < method minimum (calendar days; see thresholds.yaml)"
+    frequency: weekly (during the call)
+    owner_role: "Procurement controller; Selection committee secretary"
+    evidence: "OCID, method, start, end, days, minimum applied"
+    expected_false_positives:
+      rate_band: "medium (20-40% legitimate)"
+      causes:
+        - Urgency procedures with legally shorter periods
+        - Second calls (re-launch) published with reduced terms
+        - Date-capture errors in the publication
+    weight: 0.50
+    weight_rationale: "Specific and actionable when the period is checked against the right minimum."
+    level: process
+    sql: controls/sql/c03_short_submission_period.sql
+
+  - id: C04
+    name: Supplier concentration by entity and category (HHI)
+    ocp_reference: "OCP Red Flags for Integrity (2016) - market concentration / supplier dominance (no Cardinal code mapped)"
+    control_objective: "Spending in each entity and category is not captured by one supplier."
+    risk_mitigated: "Capture of a buyer's category by a supplier, favouritism, lock-in."
+    rule: >-
+      For each buyer x UNSPSC segment x year with at least min_awards awards with a usable amount,
+      compute HHI = sum over suppliers of (share of awarded amount x 100)^2. When HHI exceeds
+      hhi_threshold and the supplier with the largest share holds at least min_top_awards awards
+      in the cell, flag the processes awarded to that supplier.
+    parameters:
+      hhi_threshold: { ref: hhi_highly_concentrated.value, unit: "HHI points (0-10,000)" }
+      min_awards: { value: 15, unit: count, note: "below this, HHI is high by construction" }
+      min_top_awards: { value: 3, unit: count, note: "dominance must come from repeated awards, not one large contract" }
+    threshold: "HHI > 2,500, >= 15 awards in the cell, top supplier with >= 3 of them"
+    frequency: quarterly
+    owner_role: "Category manager; Internal Control"
+    evidence: "Cell (buyer-segment-year), HHI, number of awards and suppliers, top-supplier share"
+    expected_false_positives:
+      rate_band: "medium-high (30-60% legitimate)"
+      causes:
+        - Natural monopolies or exclusive distributors (patented drugs, utilities)
+        - Small cells close to the minimum size
+        - One large contract dominating the amount of a cell
+    weight: 0.30
+    weight_rationale: "A structural indicator for the cell, not proof about the individual process."
+    level: process
+    sql: controls/sql/c04_supplier_concentration.sql
+
+  - id: C05
+    name: Same winner repeated at the same entity
+    ocp_reference: "OCP Red Flags for Integrity (2016) - same supplier repeatedly winning (no Cardinal code mapped)"
+    control_objective: "Competitive procedures at an entity rotate between bidders as market conditions dictate."
+    risk_mitigated: "Bid rigging (rotation or cover bidding), favouritism by the evaluation committee."
+    rule: >-
+      For each buyer x supplier x year, among competitive processes, count wins and the
+      processes the supplier bid on. Flag the won processes when wins >= min_wins and
+      wins / bids >= min_win_rate.
+    parameters:
+      min_wins: { value: 6, unit: count }
+      min_win_rate: { value: 0.60, unit: ratio, note: "lowered from 0.80 after the first synthetic run, see D19" }
+    threshold: ">= 6 competitive wins in a year at one entity with a win rate >= 60%"
+    frequency: quarterly
+    owner_role: "Internal Control; Procurement controller"
+    evidence: "Buyer-supplier-year, wins, bids submitted, win rate, OCIDs won"
+    expected_false_positives:
+      rate_band: "medium (25-50% legitimate)"
+      causes:
+        - Efficient incumbent with the lowest prices in a local market
+        - Bid data incomplete (losing bids not published inflate the win rate)
+    weight: 0.45
+    weight_rationale: "Uses bid behaviour, not just outcomes; reasonably specific."
+    level: process
+    sql: controls/sql/c05_repeated_winner.sql
+
+  - id: C06
+    name: Contract amendments raising the amount above the cap
+    ocp_reference: "OCP Red Flags for Integrity (2016) - implementation stage: contract amendments / cost overruns"
+    control_objective: "Amendments stay within the limits that the original competition justified."
+    risk_mitigated: "A low winning bid recovered later through amendments, or scope added without a new procedure."
+    rule: >-
+      For each contract with amendments that publish an amended total, compute
+      increase = latest amended total / original amount - 1 and flag when it exceeds cap.
+    parameters:
+      cap: { ref: amendment_increase_cap.value, unit: ratio }
+    threshold: "cumulative increase > 25% (to verify under Ley 32069)"
+    frequency: monthly
+    owner_role: "Contract administrator; Internal Control"
+    evidence: "OCID, contract, original amount, amended amount, increase %, number of amendments"
+    expected_false_positives:
+      rate_band: "medium (20-40% legitimate)"
+      causes:
+        - Approved additional works (works contracts follow different caps)
+        - Price-adjustment formulas (reajustes) published as amendments
+        - Amended total published including taxes when the original was not
+    weight: 0.60
+    weight_rationale: "Direct financial impact and a clear legal reference once the cap is verified."
+    level: process
+    sql: controls/sql/c06_amendment_increase.sql
+
+  - id: C07
+    name: Unit price atypical against the category median
+    ocp_reference: "OCP Red Flags for Integrity (2016) - award stage: prices far from market / inflated prices"
+    control_objective: "Prices paid are in line with what other entities pay for the same item class."
+    risk_mitigated: "Overpricing, specification inflation, or a unit/quantity error that hides one."
+    rule: >-
+      For each UNSPSC class with at least min_group priced items, compute the median awarded unit
+      price. Flag items whose unit price is >= ratio times that median.
+    parameters:
+      ratio: { value: 3.0, unit: "x median" }
+      min_group: { value: 20, unit: count }
+    threshold: "unit price >= 3x the class median (class with >= 20 items)"
+    frequency: monthly
+    owner_role: "Category manager; Cost controller"
+    evidence: "OCID, item class, unit price, class median, ratio, group size"
+    expected_false_positives:
+      rate_band: "medium-high (30-60% legitimate)"
+      causes:
+        - Heterogeneous classes (a class mixes basic and premium items)
+        - Unit-of-measure differences (box vs. unit)
+        - Small or remote deliveries with higher logistics cost
+    weight: 0.50
+    weight_rationale: "Price is where the money is; heterogeneity of classes limits specificity."
+    level: process
+    sql: controls/sql/c07_price_outlier.sql
+
+  - id: C08
+    name: Benford's law on awarded amounts (aggregate test)
+    ocp_reference: "Analytical procedure (Nigrini 2012); not an OCP red flag on individual processes"
+    control_objective: "The population of awarded amounts of an entity looks like naturally generated amounts."
+    risk_mitigated: "Systematic fabrication or manipulation of amounts in an entity's records."
+    rule: >-
+      For all awards and for each buyer with at least min_n awards >= min_amount, compare the
+      first-digit distribution with Benford's law using the Mean Absolute Deviation (MAD) and
+      the chi-square statistic. Report Nigrini's conformity class, and flag the scope only when
+      the MAD is also more than excess_ratio times the MAD expected from sampling noise alone for
+      that n (Nigrini's fixed ranges assume large samples; at n = 300 pure noise already gives
+      MAD ~ 0.014). It is a population test only: it never flags an individual process and
+      never enters the risk score.
+    parameters:
+      min_n: { value: 300, unit: count }
+      min_amount: { value: 10, unit: PEN }
+      mad_close: { ref: benford_mad_first_digit.close }
+      mad_acceptable: { ref: benford_mad_first_digit.acceptable }
+      mad_marginal: { ref: benford_mad_first_digit.marginal }
+      excess_ratio: { value: 2.0, unit: "x null MAD", note: "MAD beyond 2x its expected value under exact Benford for the same n (~p99.9 by simulation)" }
+    threshold: "MAD > 0.015 (Nigrini nonconformity) and MAD > 2x the sampling-noise MAD for that n"
+    frequency: annual
+    owner_role: "Internal Audit (analytical review)"
+    evidence: "Scope, n, observed vs. expected digit frequencies, MAD, chi-square, conformity class"
+    expected_false_positives:
+      rate_band: "high for individual entities (structural reasons are common)"
+      causes:
+        - The 8 UIT minor-purchase limit concentrates amounts in leading digits 3-4
+        - Entities that buy few kinds of items at fixed prices
+        - Small populations
+    weight: 0.0
+    weight_rationale: "Aggregate test: excluded from the per-process score by design."
+    level: aggregate
+    sql: controls/sql/c08_benford.sql
+
+  - id: C09
+    name: Atypical time between award and contract signature
+    ocp_reference: "OCP Red Flags for Integrity (2016) - award/contract stage: delays between award and signature"
+    control_objective: "Contracts are signed promptly after award, under the conditions awarded."
+    risk_mitigated: "Renegotiation of awarded conditions before signature, or pressure on the winner."
+    rule: >-
+      For contracts with a valid signature date (not before the award), flag when the days
+      between award date and signature exceed max_days.
+    parameters:
+      max_days: { value: 60, unit: days, note: "internal policy; the legal signing deadline in business days is to_verify" }
+    threshold: "> 60 calendar days from award to signature"
+    frequency: monthly
+    owner_role: "Contract administrator"
+    evidence: "OCID, award date, signature date, days"
+    expected_false_positives:
+      rate_band: "medium (20-40% legitimate)"
+      causes:
+        - Appeals (recursos de apelación) suspending the award
+        - Guarantees or documents pending from the winner
+        - Budget certification delays at year end
+    weight: 0.40
+    weight_rationale: "Clear and cheap to review, but appeals are a frequent legitimate cause."
+    level: process
+    sql: controls/sql/c09_award_signature_delay.sql

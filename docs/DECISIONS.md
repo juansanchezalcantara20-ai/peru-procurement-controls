@@ -74,3 +74,72 @@ and that makes it dangerous.
 days, which needs a holiday calendar. The placeholders are conservative and marked `to_verify`.
 *Why:* a calendar-day threshold under-flags. The control errs towards fewer false positives until
 the business-day rule is implemented.
+
+## Phase 2 · Control catalog
+
+**D14 - The catalog is YAML plus one SQL file per control.** The YAML holds the control
+documentation an auditor expects: objective, risk, exact rule, threshold, frequency, owner role,
+evidence, expected false positives, weight. The SQL file is the executable rule. *Why:* reviewers
+read the YAML and engineers read the SQL, and neither has to be kept in sync with code elsewhere.
+The tests check that every `$parameter` in the SQL is declared in the catalog.
+
+**D15 - Parameters are either literal (`value`) or references into `thresholds.yaml` (`ref`).**
+Legal figures are always references. Internal-policy figures (window of 30 days, ratio 3x the
+median) are literals with a `note`. *Why:* this keeps a clear line between what the law says and
+what the control owner decided.
+
+**D16 - OCP references are cited only where they fit.** Cardinal codes are given only for R003
+(short submission period) and R018 (single bid), whose definitions I checked. The other
+controls follow the concept of the OCP *Red Flags for Integrity* guide, and the catalog says
+they are this project's own operationalisation. *Why:* a wrong indicator code would mislead an
+auditor who looks it up.
+
+**D17 - The expected false-positive rate is stated before measuring it.** Each control declares
+an a-priori band and its typical legitimate causes, and Phase 4 measures it on synthetic data.
+*Why:* a control owner commits to the expected noise up front. If the measured rate is far
+off, that tells them to recalibrate.
+
+**D18 - Split-purchase rule anchored on the minor-purchase limit (8 UIT).** It looks for
+purchases at 80-100% of the limit, at least 3 of them in 30 days, same buyer, supplier and UNSPSC
+segment, with a combined total above the limit. *Why:* the 8 UIT limit is the only procedure
+threshold that could be checked during the session, and it is where splitting is most common.
+The real OCDS feed may not include minor purchases, though. If it does not, this control needs
+the purchase-order dataset (see Scope & limitations).
+
+## Phase 3 · Signal engine
+
+**D19 - One calibration round on synthetic data, documented.** The parameters were written
+a priori. After the first run, three were changed: C05 win rate 0.80 → 0.60 (two injected
+pairs had rates of 0.6-0.7 because the supplier also lost elsewhere), and C04 got
+`min_awards` 10 → 15 plus a new `min_top_awards = 3`. Before that change, 111 of 125 small
+background cells exceeded HHI 2,500 because one large contract dominated them. *Why:*
+calibrating on the same data you then report on is circular. The changes are few and argued
+from mechanism, not from the score. Real calibration needs real data and reviewed cases.
+
+**D20 - Benford compares the MAD with its sampling-noise expectation.** Nigrini's fixed MAD
+ranges assume large samples. Under an exact Benford distribution, the expected MAD for sample
+size n is (1/9) Σ_d √(2 p_d (1 − p_d) / (π n)), which is 0.0136 at n = 300, already above the
+0.012 "acceptable" bound. Simulation (20,000 draws per n, from n = 150 to n = 5,000) gave a 99th
+percentile of 1.72x and a 99.9th percentile of about 2.0x that expectation, stable across n.
+The control reports Nigrini's class and flags a scope only when MAD > 2x the noise expectation.
+*Why:* without this correction most entities with a few hundred awards would look
+"nonconforming" from noise alone. That would be exactly the kind of false accusation this
+project exists to avoid.
+
+**D21 - Composite score = noisy-OR of weight x severity, one term per control.** For each
+process, only the strongest alert of each control enters, as
+`100 · (1 − Π(1 − w·s))`. Weights express specificity, i.e. how often an alert from that
+control alone is worth a review. They are set from the expected false-positive bands, not fitted.
+*Why:* the score stays bounded, rises with independent evidence and saturates. It is also easy
+to explain line by line to an audit committee. Benford has weight 0 by design.
+
+**D22 - Published outputs are aggregated only.** `outputs/` and the site contain counts by
+control, month, method, segment and priority, plus a distribution of how alerts spread across
+entities, without naming any entity. Alert-level tables (OCIDs, supplier ids, evidence) stay in
+the local DuckDB warehouse, which is git-ignored. *Why:* rule 2 says no rankings, and entities
+appear only in aggregates. A file listing flagged OCIDs is one join away from a ranking.
+
+**D23 - Entity-level and cell-level patterns are attached to processes.** HHI flags the
+processes awarded to the dominant supplier of the cell. Repeated-winner and split-purchase
+alerts flag every member process. *Why:* a reviewer works on case files, so an alert has to
+point at one. The cell-level evidence travels in the `evidence` JSON.
