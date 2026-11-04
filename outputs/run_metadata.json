@@ -16,6 +16,7 @@
     "contracts": 12577,
     "amendments": 708
   },
+  "protected_names": 938,
   "signals": {
     "alerts": 2173,
     "processes_with_alerts": 1937,
@@ -39,6 +40,7 @@
     "review_judged": 20
   },
   "report": {
-    "pages": 13
+    "pages": 16,
+    "label": "datos simulados"
   }
 }

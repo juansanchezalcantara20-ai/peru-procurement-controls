@@ -61,3 +61,13 @@ site:
   # Mínimo de entidades por grupo en cualquier vista agregada: un grupo con menos entidades
   # se fusiona en «Otras entidades» para que ninguna se pueda identificar.
   min_entities_per_group: 3
+  # Instituciones que el sitio nombra a propósito como contexto (quién publica los datos, qué es
+  # una sigla), nunca como compradoras ni en un ranking. La prueba de privacidad no las bloquea
+  # aunque también aparezcan como entidades compradoras en los datos.
+  allowed_institution_names:
+    - "Organismo Especializado para las Contrataciones Públicas Eficientes"
+    - "Organismo Supervisor de las Contrataciones del Estado"
+    - "Superintendencia Nacional de Aduanas y de Administración Tributaria"
+    - "Sistema Electrónico de Contrataciones del Estado"
+    - "Perú Compras"
+    - "Open Contracting Partnership"

@@ -33,76 +33,77 @@ class Check:
 KEPT = "(SELECT release_key FROM dq_kept_releases)"
 
 CHECKS: list[Check] = [
-    Check("DQ01", "Duplicate OCID (more than one release per process)", "warning",
-          "Only the latest release per OCID is kept (ties: last line in file).",
+    Check("DQ01", "Proceso publicado más de una vez", "warning",
+          "Se conserva solo la publicación más reciente de cada proceso.",
           """SELECT ocid, CAST(release_key AS VARCHAR) AS record_id,
                     'release ' || release_id AS detail
              FROM releases WHERE release_key NOT IN """ + KEPT),
-    Check("DQ02", "Missing buyer identifier", "critical",
-          "Process excluded from every control (no entity to attribute it to).",
+    Check("DQ02", "Proceso sin entidad compradora identificada", "critical",
+          "El proceso queda fuera de todas las señales (no hay a quién atribuirlo).",
           f"""SELECT ocid, ocid, coalesce(buyer_name, '(no name)') FROM processes
               WHERE release_key IN {KEPT} AND (buyer_id IS NULL OR buyer_id = '')"""),
-    Check("DQ03", "Award without supplier", "critical",
-          "Award excluded from supplier-based controls.",
+    Check("DQ03", "Adjudicación sin proveedor", "critical",
+          "La adjudicación queda fuera de las señales que miran al proveedor.",
           f"""SELECT ocid, award_id, 'no supplier' FROM awards
               WHERE release_key IN {KEPT} AND supplier_id IS NULL"""),
-    Check("DQ04", "Negative or zero award amount", "critical",
-          "Award amount set to NULL in the analytical layer.",
+    Check("DQ04", "Monto adjudicado negativo o cero", "critical",
+          "Se descarta el monto; el proceso sigue en las señales que no usan montos.",
           f"""SELECT ocid, award_id, CAST(amount AS VARCHAR) FROM awards
               WHERE release_key IN {KEPT} AND amount <= 0"""),
-    Check("DQ05", "Absurd award amount", "critical",
-          f"Award amount set to NULL (>{ABSURD_RATIO}x tender estimate or >S/ {ABSURD_CAP_PEN:,.0f}).",
+    Check("DQ05", "Monto adjudicado absurdo", "critical",
+          f"Se descarta el monto (más de {ABSURD_RATIO} veces el valor estimado "
+          f"o más de S/ {ABSURD_CAP_PEN:,.0f}).",
           f"""SELECT a.ocid, a.award_id, CAST(a.amount AS VARCHAR) FROM awards a
               JOIN processes p USING (release_key)
               WHERE a.release_key IN {KEPT} AND a.amount > 0 AND (a.amount > {ABSURD_CAP_PEN}
                  OR (p.tender_amount > 0 AND a.amount > {ABSURD_RATIO} * p.tender_amount))"""),
-    Check("DQ06", "Award currency is not PEN", "critical",
-          "Amount set to NULL (no FX conversion is attempted).",
+    Check("DQ06", "Adjudicación en una moneda distinta al sol", "critical",
+          "Se descarta el monto (no se intenta convertir la moneda).",
           f"""SELECT ocid, award_id, currency FROM awards
               WHERE release_key IN {KEPT} AND currency IS NOT NULL AND currency <> 'PEN'"""),
-    Check("DQ07", "Tender period ends before it starts", "critical",
-          "Tender period set to NULL (excluded from the submission-period control).",
+    Check("DQ07", "Plazo de ofertas que termina antes de empezar", "critical",
+          "Se descartan las fechas del plazo (el proceso no entra a la señal de plazo corto).",
           f"""SELECT ocid, ocid, CAST(tender_start AS VARCHAR) || ' > ' || CAST(tender_end AS VARCHAR)
               FROM processes WHERE release_key IN {KEPT} AND tender_end < tender_start"""),
-    Check("DQ08", "Award dated before the bid deadline", "warning",
-          "Reported only.",
+    Check("DQ08", "Adjudicación fechada antes del cierre de ofertas", "warning",
+          "Solo se informa.",
           f"""SELECT a.ocid, a.award_id, CAST(a.award_date AS VARCHAR) FROM awards a
               JOIN processes p USING (release_key)
               WHERE a.release_key IN {KEPT} AND p.tender_end >= p.tender_start
                 AND a.award_date < p.tender_end"""),
-    Check("DQ09", "Contract signed before its award", "critical",
-          "Signature date set to NULL (excluded from the award-to-signature control).",
+    Check("DQ09", "Contrato firmado antes de su adjudicación", "critical",
+          "Se descarta la fecha de firma (el proceso no entra a la señal de demora en la firma).",
           f"""SELECT c.ocid, c.contract_id, CAST(c.date_signed AS VARCHAR) FROM contracts c
               JOIN awards a ON a.release_key = c.release_key AND a.award_id = c.award_id
               WHERE c.release_key IN {KEPT} AND c.date_signed < CAST(a.award_date AS DATE)"""),
-    Check("DQ10", "Date outside the plausible range", "warning",
-          f"Reported only (range {MIN_DATE} to {MAX_DATE}).",
+    Check("DQ10", "Fecha fuera de un rango creíble", "warning",
+          f"Solo se informa (rango de {MIN_DATE} a {MAX_DATE}).",
           f"""SELECT ocid, ocid, 'tender_start ' || CAST(tender_start AS VARCHAR) FROM processes
               WHERE release_key IN {KEPT} AND (tender_start < '{MIN_DATE}' OR tender_start > '{MAX_DATE}')
               UNION ALL
               SELECT ocid, contract_id, 'date_signed ' || CAST(date_signed AS VARCHAR) FROM contracts
               WHERE release_key IN {KEPT} AND (date_signed < '{MIN_DATE}' OR date_signed > '{MAX_DATE}')"""),
-    Check("DQ11", "Duplicate award identifier within a process", "warning",
-          "Reported only.",
+    Check("DQ11", "Identificador de adjudicación repetido en un proceso", "warning",
+          "Solo se informa.",
           f"""SELECT ocid, award_id, CAST(count(DISTINCT supplier_id) AS VARCHAR) || ' suppliers'
               FROM awards WHERE release_key IN {KEPT}
               GROUP BY ocid, award_id HAVING count(*) > 1 AND count(DISTINCT supplier_id) = 1"""),
-    Check("DQ12", "Same party id with different names", "warning",
-          "Reported only (name variants are common in registries).",
+    Check("DQ12", "Mismo participante registrado con nombres distintos", "warning",
+          "Solo se informa (las variantes de nombre son comunes en los registros).",
           f"""SELECT min(ocid), party_id, CAST(count(DISTINCT name) AS VARCHAR) || ' names'
               FROM parties WHERE release_key IN {KEPT}
               GROUP BY party_id HAVING count(DISTINCT name) > 1"""),
-    Check("DQ13", "Item without classification", "warning",
-          "Item excluded from the category-median price control.",
+    Check("DQ13", "Artículo sin clasificación", "warning",
+          "El artículo no entra a la señal de precios atípicos.",
           f"""SELECT ocid, item_id, 'no classification' FROM items
               WHERE release_key IN {KEPT} AND (classification_id IS NULL OR classification_id = '')"""),
-    Check("DQ14", "Contract whose awardID matches no award", "warning",
-          "Reported only.",
+    Check("DQ14", "Contrato que no corresponde a ninguna adjudicación", "warning",
+          "Solo se informa.",
           f"""SELECT c.ocid, c.contract_id, coalesce(c.award_id, '(null)') FROM contracts c
               WHERE c.release_key IN {KEPT} AND NOT EXISTS (
                 SELECT 1 FROM awards a WHERE a.release_key = c.release_key AND a.award_id = c.award_id)"""),
-    Check("DQ15", "numberOfTenderers disagrees with published bids", "warning",
-          "Reported only; the analytical layer uses the count of distinct bidders when available.",
+    Check("DQ15", "Número de postores distinto al de ofertas publicadas", "warning",
+          "Solo se informa; se usa el número de postores distintos cuando está disponible.",
           f"""SELECT p.ocid, p.ocid, CAST(p.number_of_tenderers AS VARCHAR) || ' vs ' ||
                      CAST(count(DISTINCT b.supplier_id) AS VARCHAR)
               FROM processes p JOIN bids b USING (release_key)
@@ -257,48 +258,55 @@ def _md_table(df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+SEVERITY_ES = {"critical": "crítico", "warning": "menor"}
+
+
 def write_quality_report(results: dict[str, pd.DataFrame], out_dir, docs_dir,
                          source_label: str) -> None:
+    """CSV outputs plus the technical data-quality page (under Metodología)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, df in results.items():
         df.to_csv(out_dir / f"dq_{name}.csv", index=False)
-    summary = results["summary"]
-    crit = int(summary.loc[summary.severity == "critical", "records"].sum())
-    warn = int(summary.loc[summary.severity == "warning", "records"].sum())
-    md = f"""# Data quality report
+    summary = results["summary"].copy()
+    summary["severity"] = summary["severity"].map(SEVERITY_ES)
+    summary = summary.rename(columns={"check_id": "código", "check": "revisión", "severity": "gravedad",
+                                      "records": "registros", "effect": "qué se hace"})
+    comp = results["completeness"].rename(columns={"table": "tabla", "field": "campo", "rows": "filas",
+                                                   "missing": "vacíos", "missing_pct": "% vacíos"})
+    vol = results["volumes"].rename(columns={"layer": "capa", "n": "cantidad"})
+    vol["capa"] = vol["capa"].map(VOLUME_ES).fillna(vol["capa"])
+    (docs_dir / "metodologia").mkdir(parents=True, exist_ok=True)
+    (docs_dir / "metodologia" / "calidad.md").write_text(f"""# Calidad del dato: detalle técnico
 
-> **Signals, never accusations.** An alert means *"this deserves a review"*, not *"there is an
-> irregularity"*. That applies to data-quality findings too: a defect is usually a publication or
-> capture problem, not misconduct.
+**Fuente:** {source_label}
 
-**Source:** {source_label}
+Cada revisión se ejecuta sobre las tablas aplanadas de OCDS (Open Contracting Data Standard, el
+estándar internacional de datos abiertos de contrataciones). La columna «qué se hace» dice cómo
+trata la capa analítica los registros encontrados. Las revisiones críticas sacan el registro, o
+solo el campo dañado, de las vistas `f_*` que leen todas las señales; las menores solo se informan.
 
-Before controlling the data, we control its quality. Every check below is executed on the
-flattened OCDS tables; its *effect* column says what the analytical layer does with the records it
-finds. **{crit}** records hit critical checks and **{warn}** hit warning checks.
+## Volúmenes a lo largo del proceso
 
-## Volumes through the pipeline
+{_md_table(vol)}
 
-{_md_table(results["volumes"])}
-
-## Checks
+## Revisiones
 
 {_md_table(summary)}
 
-## Field completeness (latest release per OCID)
+## Campos vacíos (última publicación de cada proceso)
 
-Tender periods are expected to be empty for minor and direct purchases, which have no call for
-bids; their missing rate therefore mirrors the share of non-competitive processes.
+Las fechas del plazo de ofertas están vacías, como es de esperar, en las compras menores y
+directas, que no tienen convocatoria.
 
-{_md_table(results["completeness"])}
+{_md_table(comp)}
+""", encoding="utf-8")
 
-## How the checks feed the controls
 
-* Critical findings remove the record, or only the broken field, from the `f_*` views that every
-  control reads. A negative amount, for example, does not remove the process from the single-bid
-  control, but it is excluded from Benford and from the price-outlier control.
-* Warnings are reported only. They are listed so the data owner can fix them at source.
-* The full list of offending records is in the `dq_issues` table of the DuckDB warehouse. Only the
-  counts are versioned in `outputs/quality/`.
-"""
-    (docs_dir / "data-quality.md").write_text(md, encoding="utf-8")
+VOLUME_ES = {
+    "releases (raw)": "publicaciones (crudas)",
+    "processes kept (one per OCID)": "procesos conservados (uno por OCID)",
+    "processes in analytical layer": "procesos en la capa analítica",
+    "awards in analytical layer": "adjudicaciones en la capa analítica",
+    "awards with usable amount": "adjudicaciones con monto utilizable",
+    "contracts in analytical layer": "contratos en la capa analítica",
+}

@@ -70,7 +70,7 @@ controls:
       fragmenten en varias compras menores.
     risk_mitigated: >-
       Evitar la competencia y los controles de un procedimiento más exigente partiendo un
-      requerimiento en compras justo debajo del límite de 8 UIT.
+      requerimiento en compras justo debajo del límite de compra menor de 8 UIT (Unidad Impositiva Tributaria).
     rule: >-
       Para un mismo comprador, proveedor y segmento UNSPSC, marcar cada compra menor (no
       competitiva) cuyo monto esté entre near_limit_ratio × límite y el límite, cuando al menos
@@ -374,7 +374,7 @@ controls:
     plain_example_line: "Solo 11 de cada 100 montos empiezan con 1, cuando lo esperado es 30."
     plain_check:
       - "¿La entidad compra pocos tipos de artículos a precios fijos (eso también deforma la distribución)?"
-      - "¿Hay muchos montos justo debajo del límite de 8 UIT?"
+      - "¿Hay muchos montos justo debajo del límite de compra menor de 8 UIT (Unidad Impositiva Tributaria)?"
       - "Si la desviación persiste, pedir una muestra aleatoria de expedientes y compararlos con lo registrado."
     plain_action: "Usarla como señal para planificar una auditoría, nunca como hallazgo sobre un contrato."
     ocp_reference: "Procedimiento analítico (Nigrini 2012); no es una bandera roja de OCP sobre procesos individuales"

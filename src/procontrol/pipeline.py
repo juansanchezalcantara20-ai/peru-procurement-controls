@@ -12,6 +12,7 @@ import duckdb
 
 from .config import Config
 from .download import DownloadError, download, write_sample
+from .gates import write_protected_names
 from .ingest import ingest_files
 from .privacy import Pseudonymiser
 from .quality import run_quality, write_quality_report
@@ -73,7 +74,11 @@ class Pipeline:
         con = self.connect()
         try:
             if "ingest" in steps:
-                self.meta["ingest_counts"] = ingest_files(con, paths, pseudo)
+                names: set[str] = set()
+                self.meta["ingest_counts"] = ingest_files(con, paths, pseudo, names)
+                allowed = self.cfg.settings.get("site", {}).get("allowed_institution_names", [])
+                self.meta["protected_names"] = write_protected_names(
+                    names, self.cfg.path("warehouse").parent / "protected_names.txt", allowed)
                 write_sample(paths[0], self.cfg.path("sample_dir") / f"{self.meta['source']}_sample.jsonl",
                              pseudo, n=50)
             if "quality" in steps:

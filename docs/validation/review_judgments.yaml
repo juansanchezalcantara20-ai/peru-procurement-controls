@@ -34,11 +34,11 @@ cases:
 - control_id: C04
   ocid: ocds-synthpe-005812
   verdict: merece revisión
-  reason: 'Rubro de transporte con HHI de 8,456: un proveedor tiene 29 de 33 adjudicaciones y 92 de cada 100 soles.'
+  reason: 'Rubro de transporte con un índice de concentración de 8,456 (de un máximo de 10,000): un proveedor tiene 29 de 33 adjudicaciones y 92 de cada 100 soles.'
 - control_id: C04
   ocid: ocds-synthpe-009761
   verdict: probable falsa alarma
-  reason: HHI de 3,063 con 23 proveedores; el principal llega a 52 de cada 100 soles con solo 3 adjudicaciones, así que uno o dos contratos grandes de consultoría mueven el índice. Es la causa conocida de «un contrato grande».
+  reason: Índice de concentración de 3,063 con 23 proveedores; el principal llega a 52 de cada 100 soles con solo 3 adjudicaciones, así que uno o dos contratos grandes de consultoría mueven el índice. Es la causa conocida de «un contrato grande».
 - control_id: C05
   ocid: ocds-synthpe-003387
   verdict: merece revisión

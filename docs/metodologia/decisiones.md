@@ -237,3 +237,40 @@ mensajes de commit y los nombres propios de estándares y documentos citados («
 Standard», «Red Flags for Integrity»). *Por qué:* el lector principal ahora es un gerente peruano
 de logística, control interno o administración. Traducir los identificadores del código no le
 sirve a ese lector y rompería la compatibilidad con los datos OCDS, cuyos campos están en inglés.
+
+**D36. El sitio se escribe para un gerente, no para un analista.** Estructura fija: portada (qué es,
+una alerta de ejemplo contada como historia, cifras con su etiqueta de origen), las señales en
+lenguaje simple, una página por señal siempre en el mismo orden (qué busca, por qué importa,
+ejemplo, cuántas veces apareció, qué revisar primero, cuándo es normal que salte) y al final un
+bloque plegable «Detalle técnico»; luego «¿Funciona?», «De dónde salen los datos», glosario y
+metodología. Los textos en lenguaje simple viven en el catálogo (`plain_*`) junto a la regla, para
+que el texto y la regla cambien juntos. Cada gráfico se titula con su conclusión calculada (por
+ejemplo «82 de cada 100 concursos…») y lleva debajo una frase de cómo leerlo. *Por qué:* el lector
+decide qué expedientes revisar; necesita la conclusión y la acción, no el método.
+
+**D37. La legibilidad se prueba en el sitio construido, no en el Markdown.** `procontrol
+legibilidad site` lee el HTML final y falla si, fuera de «Detalle técnico» y de Metodología,
+encuentra bloques de código, palabras con guion bajo, frases en inglés (tres o más palabras
+funcionales inglesas que superan a las españolas, o términos inequívocos como «alerts» o
+«threshold») o una sigla conocida que no se explica la primera vez que aparece en la página. Los
+nombres propios de estándares y documentos están en una lista blanca. La CI corre la prueba en
+cada push. *Por qué:* lo que importa es lo que ve el lector, y una prueba automática impide que la
+legibilidad se degrade en la próxima vuelta.
+
+**D38. Las entidades se agrupan por tipo con un mínimo de 3 por grupo.** El tipo se deduce del
+nombre de la entidad con reglas de palabras clave («MUNICIPALIDAD DISTRITAL», «GOBIERNO REGIONAL»,
+«HOSPITAL»…). Un grupo con menos de 3 entidades se suma a «Otras entidades», y si este también
+queda con menos de 3 se omite. *Por qué:* un grupo de una sola entidad es una entidad con nombre
+disfrazado.
+
+**D39. La prueba de privacidad nunca guarda ni imprime nombres.** Al leer los datos se reúnen los
+nombres de partes, puntos de contacto (funcionarios), compradores, postores y proveedores, antes de
+seudonimizar. Se guardan solo sus huellas con clave (HMAC-SHA256, normalizadas sin tildes ni
+signos; solo nombres de 2 o más palabras y 10 o más caracteres) en el almacén local. `procontrol
+privacidad site` calcula la misma huella para cada secuencia de 2 a 14 palabras del sitio y falla
+si alguna coincide. También busca RUC, seudónimos de personas e identificadores de proceso, y
+revisa que ningún grupo agregado tenga menos de 3 entidades. El mensaje de error dice la página y
+cuántas coincidencias hubo, pero no el nombre: los registros de GitHub Actions de un repositorio
+público son públicos. Las instituciones que el sitio nombra como contexto (el OECE como fuente, la
+SUNAT en el glosario) están en una lista blanca de `config/settings.yaml`. *Por qué:* «no nombrar a
+nadie» tiene que ser una prueba que falla, no una intención.
