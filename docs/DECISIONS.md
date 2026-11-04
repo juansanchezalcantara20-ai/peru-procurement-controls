@@ -202,3 +202,16 @@ eventually disagree.
 **D32 - Power BI extracts are git-ignored.** They are alert-level (OCIDs, pseudonymised
 supplier keys). *Why:* the same privacy and no-ranking rules apply to the BI layer, and
 `MODEL.md` says the `.pbix` stays internal.
+
+## Phase 6 · Closing
+
+**D33 - Bit-for-bit reproducible published outputs.** Severities are rounded to 4 decimals,
+because DuckDB's parallel float sums are not associative. Every `ORDER BY` behind a published
+table has a deterministic tie-breaker. Two consecutive runs produce identical Markdown and CSV
+outputs (checked with md5). CI compares the integer-valued result files with the committed ones.
+*Why:* a control whose output changes between identical runs cannot be audited.
+
+**D34 - The README states what was actually used.** The data was synthetic, and the downloaders
+were never run against the live registry. 8 thresholds are still to verify, and one calibration
+round was done. *Why:* the reader of a portfolio repo is evaluating judgment, and overstating
+the evidence would be the worst signal it could send.

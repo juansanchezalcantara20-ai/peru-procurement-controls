@@ -470,14 +470,14 @@ def write_trends(docs: Path, con) -> None:
     seg = con.execute("""
         SELECT p.segment, count(DISTINCT p.ocid) AS processes, count(DISTINCT r.ocid) AS flagged,
                round(100.0 * count(DISTINCT r.ocid) / count(DISTINCT p.ocid), 1) AS flagged_pct
-        FROM f_process p LEFT JOIN risk_scores r USING (ocid) GROUP BY 1 ORDER BY flagged_pct DESC""").df()
+        FROM f_process p LEFT JOIN risk_scores r USING (ocid) GROUP BY 1 ORDER BY flagged_pct DESC, segment""").df()
     seg.insert(1, "category", seg.segment.map(SEGMENT_LABELS).fillna(""))
     meth = con.execute("""
         SELECT p.method_details AS method, count(DISTINCT p.ocid) AS processes,
                count(DISTINCT r.ocid) AS flagged,
                round(100.0 * count(DISTINCT r.ocid) / count(DISTINCT p.ocid), 1) AS flagged_pct,
                count(DISTINCT r.ocid) FILTER (WHERE r.priority = 'P1') AS p1
-        FROM f_process p LEFT JOIN risk_scores r USING (ocid) GROUP BY 1 ORDER BY processes DESC""").df()
+        FROM f_process p LEFT JOIN risk_scores r USING (ocid) GROUP BY 1 ORDER BY processes DESC, method""").df()
     etype = con.execute("""
         SELECT regexp_extract(any_value(pa.name), '\\((.*)\\)', 1) AS entity_type, p.buyer_id,
                count(DISTINCT p.ocid) AS processes, count(DISTINCT r.ocid) AS flagged
@@ -529,7 +529,7 @@ def write_risk_score(docs: Path, con, catalog: dict) -> None:
                           FROM risk_scores GROUP BY 1 ORDER BY 1""").df()
     combos = con.execute("""SELECT controls, count(*) AS processes, round(avg(score), 1) AS mean_score
                             FROM risk_scores WHERE n_controls >= 2 GROUP BY 1
-                            ORDER BY processes DESC LIMIT 12""").df()
+                            ORDER BY processes DESC, controls LIMIT 12""").df()
     weights = pd.DataFrame([{"control": c["id"], "name": c["name"], "weight": c["weight"],
                              "rationale": c["weight_rationale"]} for c in catalog["controls"]])
     pri = "\n".join(f"* **{k}**: {v}" for k, v in rs["review_priority"].items())

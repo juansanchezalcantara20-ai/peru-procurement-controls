@@ -75,6 +75,19 @@ def control_metrics(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def priority_metrics(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    """Does the composite score triage? Share of flagged processes carrying an injected
+    process-level pattern, by review priority (the entity-wide Benford pattern is left out)."""
+    return con.execute("""
+        WITH g AS (SELECT DISTINCT ocid FROM gt WHERE pattern <> 'benford_fabricated_amounts')
+        SELECT priority, count(*) AS processes,
+               count(*) FILTER (WHERE ocid IN (SELECT ocid FROM g)) AS with_injected_pattern,
+               round(100.0 * count(*) FILTER (WHERE ocid IN (SELECT ocid FROM g)) / count(*), 1)
+                   AS pct_injected
+        FROM risk_scores GROUP BY 1 ORDER BY 1
+    """).df()
+
+
 def benford_metrics(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     return con.execute("""
         WITH inj AS (SELECT DISTINCT p.buyer_id FROM gt JOIN f_process p USING (ocid)
@@ -120,7 +133,8 @@ def review_sample(con: duckdb.DuckDBPyConnection, per_control: int, extra_top: i
         UNION
         SELECT a.control_id, a.ocid FROM (
             SELECT ocid FROM risk_scores ORDER BY score DESC, ocid LIMIT {extra_top}) t
-        JOIN (SELECT control_id, ocid, row_number() OVER (PARTITION BY ocid ORDER BY weight * severity DESC) r
+        JOIN (SELECT control_id, ocid,
+                     row_number() OVER (PARTITION BY ocid ORDER BY weight * severity DESC, control_id) r
               FROM alerts) a ON a.ocid = t.ocid AND a.r = 1
     """).df()
     return sample.sort_values(["control_id", "ocid"]).reset_index(drop=True)
@@ -213,6 +227,8 @@ def run(cfg: Config, con: duckdb.DuckDBPyConnection, meta: dict) -> dict:
     if synthetic:
         metrics = control_metrics(con)
         benford = benford_metrics(con)
+        priority = priority_metrics(con)
+        priority.to_csv(out / "priority_metrics.csv", index=False)
         dq = dq_metrics(con)
         metrics.to_csv(out / "control_metrics.csv", index=False)
         benford.to_csv(out / "benford_validation.csv", index=False)
@@ -221,14 +237,14 @@ def run(cfg: Config, con: duckdb.DuckDBPyConnection, meta: dict) -> dict:
         result.update(mean_recall=round(float(metrics.recall.mean()), 3),
                       dq_detected=int(dq.detected.sum()), dq_injected=int(dq.injected.sum()))
     else:
-        metrics = benford = dq = None
+        metrics = benford = dq = priority = None
 
     judgments_path = cfg.path("docs") / "validation" / "review_judgments.yaml"
     judgments = load_yaml(judgments_path) if judgments_path.exists() else {"cases": []}
     review = merge_judgments(ctx, judgments)
     review_public = review.drop(columns=["ocid", "alert_id", "evidence"], errors="ignore")
     review_public.to_csv(out / "case_review.csv", index=False)
-    write_validation_page(cfg, metrics, benford, dq, review, synthetic)
+    write_validation_page(cfg, metrics, benford, dq, review, synthetic, priority)
     if "verdict" in review and synthetic:
         judged = review.dropna(subset=["verdict"])
         result["review_judged"] = int(len(judged))
@@ -245,6 +261,23 @@ def merge_judgments(ctx: pd.DataFrame, judgments: dict) -> pd.DataFrame:
     return ctx
 
 
+def _benford_text(b: pd.DataFrame) -> str:
+    b = b.set_index("scope")
+    inj = b.loc["injected entity"] if "injected entity" in b.index else None
+    oth = b.loc["other entities"] if "other entities" in b.index else None
+    if inj is None or oth is None:
+        return ""
+    caught = "keeps" if inj.flagged_beyond_noise else "misses"
+    return (f"Nigrini's fixed ranges call {int(oth.nigrini_nonconformity)} of {int(oth.scopes_tested)} "
+            "neutral entities \"nonconforming\". At a few hundred amounts, sampling noise alone "
+            f"produces that MAD (mean expected {oth.mean_mad_null:.4f}). The sampling-noise correction "
+            f"(D20) {caught} the entity with fabricated amounts and flags "
+            f"{int(oth.flagged_beyond_noise)} neutral entities. The population test on all awards also "
+            "exceeds the corrected bound. With 12,000+ amounts the test is sensitive enough to see the "
+            "planted entity *and* the structural pile of minor purchases just under 8 UIT, and that "
+            "is why it is read at the population level, never per process.")
+
+
 def _evidence_summary(ev: str) -> str:
     try:
         d = json.loads(ev)
@@ -257,7 +290,7 @@ def _evidence_summary(ev: str) -> str:
 
 
 def write_validation_page(cfg: Config, metrics, benford, dq, review: pd.DataFrame,
-                          synthetic: bool) -> None:
+                          synthetic: bool, priority=None) -> None:
     docs = cfg.path("docs")
     parts = ["""# Validation of the controls
 
@@ -294,15 +327,19 @@ against injected cases is a *lower bound* of usefulness on real data, where some
 "background" would be real risk. It is also an *upper bound* of how cleanly the rules separate
 signal from noise, because the injected patterns are deliberately clean.
 
+### Does the composite score triage?
+
+{_md_table(priority)}
+
+Each control alone is noisy. Combined through the noisy-OR score, the **P1** queue is mostly
+planted cases and **P3** mostly background. That is the point of scoring: it orders the
+reviewer's time, it does not decide.
+
 ### Benford (aggregate test)
 
 {_md_table(benford)}
 
-Nigrini's fixed ranges call many entities "nonconforming" that are not: at a few hundred
-amounts, sampling noise alone produces that MAD. The sampling-noise correction (D20) keeps the
-entity with fabricated amounts and drops most of the noise. One background entity still exceeds
-the corrected bound, and that is the structural false positive the catalog anticipates: the
-8 UIT limit piles minor purchases into leading digits 3-4.
+{_benford_text(benford)}
 
 ### Data-quality checks
 

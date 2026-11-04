@@ -119,7 +119,8 @@ def run_control(con: duckdb.DuckDBPyConnection, cfg: Config, control: Control) -
     if list(df.columns) != expected:
         raise ValueError(f"{control.id}: output columns {list(df.columns)} != {expected}")
     if control.level == "process":
-        df["severity"] = df["severity"].astype(float).clip(0.0, 1.0)
+        # rounded: parallel float sums are not bit-reproducible, published results must be
+        df["severity"] = df["severity"].astype(float).clip(0.0, 1.0).round(4)
     return df
 
 
@@ -214,7 +215,7 @@ def write_aggregates(con: duckdb.DuckDBPyConnection, out: Path) -> None:
             SELECT p.method_details, count(DISTINCT p.ocid) AS processes,
                    count(DISTINCT a.ocid) AS processes_with_alert,
                    round(100.0 * count(DISTINCT a.ocid) / count(DISTINCT p.ocid), 2) AS pct
-            FROM f_process p LEFT JOIN alerts a USING (ocid) GROUP BY ALL ORDER BY processes DESC""",
+            FROM f_process p LEFT JOIN alerts a USING (ocid) GROUP BY ALL ORDER BY processes DESC, 1""",
         "alert_rate_by_segment": """
             SELECT p.segment, count(DISTINCT p.ocid) AS processes,
                    count(DISTINCT a.ocid) AS processes_with_alert,

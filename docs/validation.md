@@ -41,6 +41,18 @@ against injected cases is a *lower bound* of usefulness on real data, where some
 "background" would be real risk. It is also an *upper bound* of how cleanly the rules separate
 signal from noise, because the injected patterns are deliberately clean.
 
+### Does the composite score triage?
+
+| priority | processes | with_injected_pattern | pct_injected |
+|---|---|---|---|
+| P1 | 178 | 147 | 82.6 |
+| P2 | 1205 | 332 | 27.6 |
+| P3 | 554 | 63 | 11.4 |
+
+Each control alone is noisy. Combined through the noisy-OR score, the **P1** queue is mostly
+planted cases and **P3** mostly background. That is the point of scoring: it orders the
+reviewer's time, it does not decide.
+
 ### Benford (aggregate test)
 
 | scope | scopes_tested | nigrini_nonconformity | flagged_beyond_noise | mean_mad | mean_mad_null |
@@ -49,11 +61,7 @@ signal from noise, because the injected patterns are deliberately clean.
 | injected entity | 1 | 1 | 1 | 0.0293 | 0.0078 |
 | other entities | 15 | 7 | 0 | 0.0154 | 0.012 |
 
-Nigrini's fixed ranges call many entities "nonconforming" that are not: at a few hundred
-amounts, sampling noise alone produces that MAD. The sampling-noise correction (D20) keeps the
-entity with fabricated amounts and drops most of the noise. One background entity still exceeds
-the corrected bound, and that is the structural false positive the catalog anticipates: the
-8 UIT limit piles minor purchases into leading digits 3-4.
+Nigrini's fixed ranges call 7 of 15 neutral entities "nonconforming". At a few hundred amounts, sampling noise alone produces that MAD (mean expected 0.0120). The sampling-noise correction (D20) keeps the entity with fabricated amounts and flags 0 neutral entities. The population test on all awards also exceeds the corrected bound. With 12,000+ amounts the test is sensitive enough to see the planted entity *and* the structural pile of minor purchases just under 8 UIT, and that is why it is read at the population level, never per process.
 
 ### Data-quality checks
 

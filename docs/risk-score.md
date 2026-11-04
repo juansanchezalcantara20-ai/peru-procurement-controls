@@ -57,8 +57,8 @@ time, because each extra signal makes a legitimate explanation less likely.
 | C03,C04 | 7 | 34.1 |
 | C02,C06 | 6 | 47.3 |
 | C04,C07 | 5 | 40.2 |
-| C04,C06 | 3 | 30.3 |
 | C02,C05 | 3 | 51.0 |
-| C05,C06 | 3 | 45.4 |
+| C02,C09 | 3 | 51.8 |
+| C03,C06 | 3 | 28.6 |
 
 *The score orders the review queue. It does not measure wrongdoing.*

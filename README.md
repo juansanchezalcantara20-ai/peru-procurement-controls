@@ -1,66 +1,168 @@
 # Peru procurement controls
 
-Continuous-control analytics on Peruvian public procurement (OCDS): data quality, a written
-control catalog and a signal engine.
+**Continuous-control analytics on Peruvian public procurement (OCDS).** Purchasing data turned
+into *controls*: written rules that detect risk signals, each with its threshold, owner role,
+evidence and expected false-positive rate, the way an internal-control or continuous-auditing
+function works.
 
 > **Signals, never accusations.** An alert means *"this deserves a review"*, not *"there is an
 > irregularity"*. No supplier, official or person is ranked or named. Public entities appear
-> only in aggregated views.
+> only in aggregated views. Natural persons are pseudonymised before anything is stored.
 
-> **Data actually used: synthetic (Plan C).** The network policy of the build environment
-> blocked the OCP Data Registry and the OECE portal. All results in this repository come from a
-> seeded synthetic OCDS dataset with injected, known risk patterns. The download code for the
-> real publications (Plan A: OECE; Plan B: Perú Compras) is included but has not been run.
+> **Data actually used: synthetic (Plan C).** The build environment's network policy blocked
+> the OCP Data Registry and the OECE portal. Every result here comes from a seeded synthetic
+> OCDS dataset (2024-2025, 12.5k processes, 40 entities) with injected, known risk patterns. It
+> describes no real entity. Downloaders for the real publications (Plan A: OECE, Plan B: Perú
+> Compras) are included and untested against the live registry.
 
-## Status
+## Executive summary
 
-| Phase | Content | State |
-|---|---|---|
-| 1 | Ingestion (OCDS → DuckDB) and data-quality report | done |
-| 2 | Control catalog (9 controls) | done |
-| 3 | Signal engine + composite risk score | done |
-| 4 | Validation (injected patterns + blind case review) | done |
-| 5 | MkDocs site + Power BI model | done |
+| | |
+|---|---|
+| **What** | 15 data-quality checks, 9 controls (8 per process + Benford as an aggregate test), a composite risk score, validation, a site and a Power BI model |
+| **Data quality first** | All 57 injected data defects detected (duplicates, negative/absurd amounts, non-PEN currency, incoherent dates, missing buyer). Critical defects are excluded field by field before any control runs |
+| **Detection** | Recall 95-100% on every injected pattern ([validation](docs/validation.md)) |
+| **Noise, measured** | Share of alerts on neutral background: 5% (price outlier) to 82% (single bid). Each control declared its expected band *before* it was measured |
+| **Triage** | 83% of P1 (top-priority) processes carry a planted pattern, against 11% of P3. Combining signals is where the precision comes from |
+| **Case review** | 20 alerts reviewed blind. 15 of 19 blind verdicts agree with the ground truth. The review changed one control (C09 now excludes minor purchases) |
+| **Honesty** | 8 legal thresholds still `to_verify` and printed on every run; one calibration round documented ([D19](docs/DECISIONS.md)) |
+
+**Three aggregate patterns worth a look** (on synthetic data, so they illustrate the method, not
+Peru):
+
+1. **Benford's fixed thresholds over-flag small entities.** With a few hundred amounts per
+   entity, Nigrini's ranges call 8 of 16 entities "nonconforming". Correcting for sampling
+   noise (the expected MAD for that *n*) leaves exactly one: the planted entity.
+   Without the correction, the test would accuse noise.
+2. **The single-bid flag is common, and therefore weak on its own.** 6% of neutral processes
+   trigger it (18.6% of *Adjudicación simplificada*). It carries the lowest weight and is
+   reviewed only together with other signals or an entity rate above the national rate.
+3. **Concentration and repeated winning travel together.** C04 + C05 is the most frequent pair
+   of co-firing controls (101 processes). Each control alone is noisy, but together they make up
+   most of the P1 queue.
 
 ## Run it
 
+One command reproduces everything: install, pipeline, lint, tests and site.
+
 ```bash
-make all          # install, run the pipeline, lint, test, build the site
+make all
 ```
 
-or step by step:
+Step by step:
 
 ```bash
 python -m pip install -e ".[dev]"
-python -m procontrol run                 # synthetic data (default)
-python -m procontrol run --source oece   # Plan A, after setting the publication id
-python -m procontrol to-verify           # thresholds still to verify
-python -m pytest
 ```
 
-## Layout
+```bash
+python -m procontrol run                    # synthetic data (default, offline, seeded)
+```
+
+```bash
+python -m procontrol run --source oece      # Plan A, after setting the publication id in config/settings.yaml
+```
+
+```bash
+python -m procontrol to-verify              # thresholds still marked to_verify
+```
+
+```bash
+python -m pytest && python -m ruff check src tests && python -m mkdocs serve
+```
+
+Set `PROCONTROL_SALT` to a secret before processing real data. It keys the hash that
+pseudonymises natural persons.
+
+## How it works
 
 ```
-config/       settings.yaml (source, paths) and thresholds.yaml (every legal threshold + source)
-src/procontrol/
-  synthetic.py  Plan C generator with injected risk patterns and ground truth
-  download.py   Plan A/B downloader (OCP Data Registry)
-  ingest.py     OCDS → relational tables in DuckDB
-  privacy.py    keyed pseudonymisation of natural persons
-  quality.py    15 data-quality checks and the clean analytical layer (f_* views)
-data/sample/  small pseudonymised sample (raw data is git-ignored)
-outputs/      aggregated, versioned results
-docs/         site source, DECISIONS.md
+acquire ─► ingest ─► quality ─► signals ─► validate ─► report
+ (Plan A/B/C)  OCDS→DuckDB  15 checks,   catalog-driven   injected       MkDocs site,
+               natural       clean f_*    engine, noisy-OR patterns +     Power BI export
+               persons       views        risk score       blind review
+               hashed
 ```
+
+| Path | Content |
+|---|---|
+| `config/thresholds.yaml` | Every legal or methodological threshold with its source, check date and status |
+| `controls/catalog.yaml` | **The control catalog**: objective, risk, rule, threshold, frequency, owner role, evidence, expected false positives, weight |
+| `controls/sql/` | The exact rule of each control, executed by the engine with parameters bound from the catalog |
+| `src/procontrol/` | `synthetic`, `download`, `ingest`, `privacy`, `quality`, `engine`, `validation`, `report`, `powerbi` |
+| `docs/` | Site source (pages generated by the pipeline), [`DECISIONS.md`](docs/DECISIONS.md), case-review verdicts |
+| `powerbi/` | [`measures.dax`](powerbi/measures.dax) and [`MODEL.md`](powerbi/MODEL.md) (star schema, relationships, pages) |
+| `outputs/` | Aggregated, versioned results only. Alert-level data stays in the local, git-ignored DuckDB |
+| `data/sample/` | 50 pseudonymised releases. Raw data is downloaded or generated, never committed |
+| `tests/` | 60+ tests. Every signal has small cases that must fire and cases that must not |
+
+### The controls
+
+| ID | Signal | Reference | Weight |
+|---|---|---|---|
+| C01 | Split purchases just below the 8 UIT minor-purchase limit | OCP red flags (splitting) | 0.55 |
+| C02 | Single bidder in a competitive procedure | OCP Cardinal R018 | 0.35 |
+| C03 | Abnormally short submission period (method minimum) | OCP Cardinal R003 | 0.50 |
+| C04 | Supplier concentration by entity and category (HHI) | OCP red flags (concentration) | 0.30 |
+| C05 | Same winner repeated at the same entity | OCP red flags (repeat winner) | 0.45 |
+| C06 | Amendments raising the amount above the cap | OCP red flags (amendments) | 0.60 |
+| C07 | Unit price atypical against the class median | OCP red flags (pricing) | 0.50 |
+| C08 | Benford's law on awarded amounts, aggregate only | Nigrini (2012) | 0 |
+| C09 | Atypical time from award to contract signature | OCP red flags (award/contract) | 0.40 |
+
+### Personal data
+
+Suppliers whose RUC starts with 10, 15 or 17 (issued to individuals), or whose identifier is a
+DNI, are replaced *at ingestion* by `NP-<HMAC-SHA256(key, document)[:16]>`, with a generic name
+and no document number. A keyed hash cannot be reversed by brute force over the DNI space, and
+it stays deterministic, so aggregation still works. The versioned sample goes through the same
+pseudonymisation, and tests check that no name or document reaches the warehouse or the outputs
+([D10](docs/DECISIONS.md)).
+
+## What this demonstrates
+
+| Job requirement | Where it shows |
+|---|---|
+| **Internal control / control design** | Every control has objective, risk, rule, threshold, frequency, owner role, evidence and expected false positives (`controls/catalog.yaml`). Legal thresholds are kept apart from internal-policy parameters |
+| **Continuous auditing** | Controls run from a catalog on a schedule-ready pipeline, produce evidence per alert, and roll up into a review queue (P1/P2/P3) with a documented scoring method |
+| **Process audit** | A blind case review with a written protocol, whose findings changed the design of a control. Measured false-positive rates, not just alarm counts |
+| **Procurement analytics** | OCDS end to end (tender, bids, awards, contracts, amendments), Peruvian procurement methods, UIT-indexed limits, HHI, unit-price benchmarking, splitting |
+| **Data quality & governance** | 15 checks before any control; field-level exclusion; a threshold register with sources and verification status; a decision log; personal-data pseudonymisation |
+| **SQL** | Every rule is a DuckDB SQL file: window self-joins for clusters, HHI, robust medians, Benford with a sampling-noise reference |
+| **Python** | A packaged pipeline, a seeded generator with ground truth, a catalog-driven engine, pytest, ruff, CI and reproducible outputs |
+| **Risk data analysis & BI** | A noisy-OR composite score, validation metrics, a generated MkDocs site, and a Power BI star schema with DAX measures |
 
 ## How this was built
 
-I built this repository by directing Claude Code (Anthropic's coding agent). I set the
-objectives, the rules, the control design and the acceptance criteria, and the agent wrote the
-code, tests and documentation under those constraints. Every design decision is logged with its
-reason in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+I built this repository by directing Claude Code (Anthropic's coding agent) in a single
+autonomous session. I set the objectives, the hard rules (public or synthetic data only, signals
+not accusations, pseudonymisation, thresholds with sources, tests for every signal) and the
+phase plan. The agent wrote the code, SQL, tests and documentation within those limits, and
+logged every design decision with its reason in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+The blind case review in Phase 4 was also produced in that session, and the review file says
+so.
 
 ## Scope & limitations
 
-* Synthetic data only so far (see above). Nothing here describes any real Peruvian entity.
-* Most legal thresholds are marked `to_verify` in `config/thresholds.yaml`.
+* **Synthetic data only.** The real OECE / Perú Compras publications were not reachable from the
+  build environment. Patterns, rates and charts illustrate the method and say nothing about
+  Peru. The generator is simple: amounts are log-normal, suppliers are chosen by weighted
+  affinity, and the minor-purchase amounts are capped at 97% of the limit, which creates a
+  visible pile in the C01 chart.
+* **The synthetic validation is optimistic.** Injected patterns are cleaner than real ones, so
+  recall here is an upper bound. One calibration round was done on the same data ([D19](docs/DECISIONS.md)).
+* **Thresholds to verify.** Only the UIT values (2024-2026) and the 8 UIT minor-purchase limit
+  were checked, in secondary sources. Minimum submission periods (business days), the amendment
+  cap under Ley 32069 and the 2023 UIT are `to_verify`. The registry publication ids are not
+  set.
+* **Real-feed assumptions to check.** Minor purchases may not be in the OCDS feed. If they are
+  not, C01 needs the purchase-order dataset. Amended totals are read from `amendments[].value`
+  or the synthetic `x_amendedValue`, and the real field must be confirmed. Bids may be published
+  only as `tender.tenderers`, without amounts.
+* **No FX conversion, no business-day calendar, no appeal data.** Each of these limits what the
+  controls can conclude.
+* **Not legal advice and not an audit opinion.** A signal is a reason to look, never a finding.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

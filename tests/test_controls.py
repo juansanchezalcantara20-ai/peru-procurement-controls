@@ -128,7 +128,7 @@ def test_c06_amendment_increase():
     ]
     out = fire(rels, "C06")
     assert set(out["ocid"]) == {"big"}
-    assert math.isclose(out["severity"].iloc[0], (0.5 - 0.25) / 0.75)
+    assert math.isclose(out["severity"].iloc[0], (0.5 - 0.25) / 0.75, abs_tol=1e-4)
 
 
 # C07 price outlier -------------------------------------------------------------------------
